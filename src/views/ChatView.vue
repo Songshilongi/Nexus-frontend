@@ -2,29 +2,29 @@
   <el-container class="layout">
     <!-- 左侧侧边栏 -->
     <el-aside width="260px" class="sidebar">
-      <!-- LOGO -->
+      <!-- 文字 LOGO -->
       <div class="logo-area">
         <div class="logo-text">Chemical AI Chat</div>
       </div>
 
-      <!-- 功能按钮 -->
       <div class="menu-btn">
         <el-icon><ChatRound /></el-icon>
         <span>新建对话</span>
       </div>
+
       <div class="menu-btn">
         <el-icon><Key /></el-icon>
         <span>密钥管理</span>
       </div>
+
       <div class="menu-btn">
         <el-icon><DocumentAdd /></el-icon>
         <span>任务创建</span>
       </div>
 
-      <!-- 历史对话标题 -->
-      <div class="section-title">历史对话</div>
+      <!-- 历史对话 -->
+      <div class="section-title" style="margin-top: 25px">历史对话</div>
 
-      <!-- 历史列表（可滚动） -->
       <div class="history-list">
         <div v-for="(item, index) in history" :key="index" class="history-item">
           <el-icon><Menu /></el-icon>
@@ -32,8 +32,8 @@
         </div>
       </div>
 
-      <!-- 固定在底部的用户信息卡片（关键） -->
-      <div class="user-card-fixed">
+      <!-- 底部用户信息 -->
+      <div class="user-card">
         <div class="u-info">
           <div class="name">MOMO</div>
           <div class="email">momo@MODAO.com</div>
@@ -42,40 +42,40 @@
       </div>
     </el-aside>
 
-    <!-- 主内容区 -->
+    <!-- 主区域 -->
     <el-main class="main-area">
       <div class="welcome-container">
         <div class="welcome-hi">你好，MOMO</div>
         <div class="welcome-q">今天需要我帮你做点什么吗？</div>
 
-        <!-- 现代输入框（和图片一模一样） -->
-        <div class="modern-input-wrapper">
-          <div class="modern-input-container">
-            <el-button class="plus-btn" circle>
-              <el-icon><Plus /></el-icon>
-            </el-button>
+        <div class="input-box">
+          <!-- 输入框 -->
+          <el-input
+            type="textarea"
+            placeholder="请输入内容..."
+            v-model="inputContent"
+            :autosize="{ minRows: 3, maxRows: 3 }"
+            class="chat-input"
+          />
 
-            <el-input
-              v-model="inputContent"
-              type="textarea"
-              :autosize="{ minRows: 1, maxRows: 8 }"
-              placeholder="询问任何问题..."
-              class="modern-textarea"
-              @input="adjustHeight"
-            />
+          <!-- 底部工具栏 -->
+          <div class="input-footer">
+            <div class="left-tools">
+              <el-button text>
+                <el-icon><Picture /></el-icon> 上传图片
+              </el-button>
+              <el-button text>
+                <el-icon><Folder /></el-icon> 上传文档
+              </el-button>
+            </div>
 
-            <el-button
-              class="send-btn"
-              :class="{ active: inputContent.trim() }"
-              circle
-              type="primary"
-              :disabled="!inputContent.trim()"
-            >
-              <el-icon><Promotion /></el-icon>
-            </el-button>
+            <div class="right-tools">
+              <span>{{ inputContent.length }}/200</span>
+              <el-button circle type="primary" class="send-btn">
+                <el-icon><Promotion /></el-icon>
+              </el-button>
+            </div>
           </div>
-
-          <div class="input-hint">可以上传图片、PDF、文本文件等</div>
         </div>
       </div>
     </el-main>
@@ -87,49 +87,42 @@ import { ref } from 'vue'
 import {
   ChatRound,
   Key,
-  DocumentAdd,
   Menu,
   MoreFilled,
-  Plus,
+  Picture,
+  Folder,
   Promotion,
 } from '@element-plus/icons-vue'
 
 const inputContent = ref('')
+const usernameInitial = 'M' // 用户头像用首字母
 
 const history = [
   '对话内容对话内容对话内容对话内容…',
   '对话内容对话内容对话内容对话内容…',
   '对话内容对话内容对话内容对话内容…',
-  '化学反应预测相关问题',
-  '分子结构生成任务',
 ]
-
-const adjustHeight = () => {
-  // 可选：配合 autosize 做额外处理
-}
 </script>
 
 <style scoped>
-/* 整体布局 */
+/* 主布局 */
 .layout {
   height: 100vh;
   background: #f8f8f9;
-  overflow: hidden;
 }
 
-/* ============= 左侧侧边栏 ============= */
+/* ---------------- 左侧区域 ---------------- */
 .sidebar {
   background: #fff;
   border-right: 1px solid #eee;
   display: flex;
   flex-direction: column;
-  padding: 20px 0;
-  height: 100%;
-  position: relative;
+  padding: 20px;
 }
 
+/* 纯文字 LOGO */
 .logo-area {
-  padding: 0 20px 25px;
+  margin-bottom: 25px;
 }
 
 .logo-text {
@@ -138,198 +131,150 @@ const adjustHeight = () => {
   letter-spacing: 0.5px;
 }
 
+/* 小标题 */
+.section-title {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 10px;
+  margin-top: 10px;
+}
+
+/* 侧边栏按钮 */
 .menu-btn {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 20px;
+  gap: 10px;
+  padding: 12px 10px;
   border-radius: 8px;
   cursor: pointer;
   font-size: 14px;
   color: #333;
-  margin: 4px 0;
 }
 
 .menu-btn:hover {
-  background: #f5f5f7;
+  background: #f2f2f3;
 }
 
-.section-title {
-  padding: 0 20px;
-  font-size: 13px;
-  color: #888;
-  font-weight: 500;
-  margin: 20px 0 8px;
-}
-
-/* 历史记录区域：占满剩余空间并可滚动 */
+/* 历史记录 */
 .history-list {
   flex: 1;
   overflow-y: auto;
-  padding: 0 20px;
-  margin: 0;
-}
-
-/* 滚动条美化（可选） */
-.history-list::-webkit-scrollbar {
-  width: 4px;
-}
-.history-list::-webkit-scrollbar-thumb {
-  background: #ddd;
-  border-radius: 2px;
+  padding-right: 5px;
+  margin-top: 5px;
 }
 
 .history-item {
   display: flex;
   align-items: center;
   gap: 10px;
-  background: #f8f8f9;
+  background: #f7f7f7;
   padding: 10px 12px;
   border-radius: 10px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
   cursor: pointer;
+}
+
+.text {
   font-size: 14px;
-  transition: background 0.2s;
+  color: #333;
 }
 
-.history-item:hover {
-  background: #f0f0f2;
-}
-
-.history-item .text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* 关键：用户信息固定在左下角 */
-.user-card-fixed {
+/* 底部用户卡片 */
+.user-card {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 15px 20px;
+  gap: 10px;
   border-top: 1px solid #eee;
-  margin-top: auto; /* 这一行最关键！让它推到最底部 */
-  background: #fff;
+  padding-top: 15px;
+  padding-bottom: 5px;
 }
 
-.u-info .name {
+/* 纯字母头像 */
+.avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #7a8cff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.u-info {
+  flex: 1;
+}
+
+.name {
   font-weight: 600;
-  font-size: 15px;
 }
 
-.u-info .email {
+.email {
   font-size: 12px;
-  color: #888;
-  margin-top: 2px;
+  color: #666;
 }
 
-/* ============= 右侧主区域 ============= */
+/* ---------------- 右侧主区域 ---------------- */
 .main-area {
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 40px;
-  background: #f8f8f9;
 }
 
 .welcome-container {
-  width: 100%;
-  max-width: 860px;
   text-align: center;
+  width: 70%;
 }
 
 .welcome-hi {
   font-size: 20px;
-  color: #666;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
+  color: #555;
 }
 
 .welcome-q {
-  font-size: 28px;
+  font-size: 22px;
   font-weight: 600;
-  color: #333;
-  margin-bottom: 60px;
+  margin-bottom: 40px;
 }
 
-/* ============= 现代输入框（和你的图片完全一致） ============= */
-.modern-input-wrapper {
+/* 输入卡片 */
+.input-box {
+  background: #fff;
+  padding: 20px;
+  border-radius: 16px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
   width: 100%;
 }
 
-.modern-input-container {
-  position: relative;
-  background: #fff;
-  border-radius: 28px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  padding: 14px 18px;
+.chat-input {
+  width: 100%;
+}
+
+/* 底部工具栏 */
+.input-footer {
+  margin-top: 10px;
   display: flex;
-  align-items: flex-end;
-  gap: 12px;
-  transition: all 0.25s ease;
+  justify-content: space-between;
+  align-items: center;
 }
 
-.modern-input-container:focus-within {
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.14);
-  transform: translateY(-1px);
+.left-tools {
+  display: flex;
+  gap: 10px;
 }
 
-/* 加号按钮 */
-.plus-btn {
-  width: 40px;
-  height: 40px;
-  background: #f2f2f3;
-  border: none;
-  color: #888;
-  flex-shrink: 0;
+.right-tools {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  color: #777;
 }
 
-.plus-btn:hover {
-  background: #e5e5e7;
-}
-
-/* 输入框 */
-.modern-textarea :deep(.el-textarea__inner) {
-  border: none !important;
-  box-shadow: none !important;
-  resize: none !important;
-  font-size: 16px;
-  line-height: 1.5;
-  padding: 8px 0 !important;
-  min-height: 24px !important;
-}
-
-.modern-textarea :deep(.el-textarea) {
-  flex: 1;
-}
-
-/* 发送按钮 */
 .send-btn {
-  width: 40px;
-  height: 40px;
-  background: #7a8cff !important;
-  border: none !important;
-  opacity: 0.4;
-  pointer-events: none;
-  transition: all 0.3s ease;
-  flex-shrink: 0;
-}
-
-.send-btn.active {
-  opacity: 1;
-  pointer-events: auto;
-  transform: scale(1.05);
-}
-
-.send-btn:hover {
-  background: #6a7bff !important;
-}
-
-/* 底部提示文字 */
-.input-hint {
-  text-align: center;
-  margin-top: 16px;
-  color: #999;
-  font-size: 13px;
+  background: #7a8cff;
+  border: none;
 }
 </style>
