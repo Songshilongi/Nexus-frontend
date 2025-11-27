@@ -282,7 +282,7 @@ async function register() {
     password: form.value.password,
     email: form.value.email.trim(),
   })
-  if (res.data.code === 0) {
+  if (res.data.code === 200) {
     ElMessage.success('注册成功，请登录')
     switchMode('login')
   } else {
@@ -296,7 +296,7 @@ async function login() {
     password: form.value.password,
   })
 
-  if (res.data.code === 0) {
+  if (res.data.code === 200) {
     const { token, userId, username, email } = res.data.data
     localStorage.setItem('token', token)
     localStorage.setItem('userId', userId)
@@ -304,7 +304,7 @@ async function login() {
     localStorage.setItem('email', email || '')
 
     ElMessage.success('登录成功')
-    router.push('/dashboard')
+    router.push('/chat')
   } else {
     ElMessage.error(res.data.message || '用户名或密码错误')
   }
@@ -323,7 +323,7 @@ async function sendResetCode() {
       email: form.value.email.trim(),
     })
 
-    if (res.data.code === 0) {
+    if (res.data.code === 200) {
       ElMessage.success('验证码已发送，请查收邮箱')
       codeCountdown.value = 60
       codeTimer = setInterval(() => {
@@ -347,7 +347,7 @@ async function resetPassword() {
       verifyCode: form.value.code,
     })
 
-    if (res.data.code === 0) {
+    if (res.data.code === 200) {
       ElMessage.success('密码重置成功，请重新登录')
       switchMode('login')
     } else {
