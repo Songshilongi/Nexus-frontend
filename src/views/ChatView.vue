@@ -60,14 +60,8 @@
 
           <!-- 底部工具栏 -->
           <div class="input-footer">
-            <div class="left-tools">
-              <el-button text>
-                <el-icon><Picture /></el-icon> 上传图片
-              </el-button>
-              <el-button text>
-                <el-icon><Folder /></el-icon> 上传文档
-              </el-button>
-            </div>
+            <!-- 已移除左侧的上传图片和文件按钮 -->
+            <div class="left-tools"></div>
 
             <div class="right-tools">
               <span>{{ inputContent.length }}/200</span>
@@ -89,8 +83,8 @@ import {
   Key,
   Menu,
   MoreFilled,
-  Picture,
-  Folder,
+  // Picture,  // 已移除
+  // Folder,  // 已移除
   Promotion,
 } from '@element-plus/icons-vue'
 
