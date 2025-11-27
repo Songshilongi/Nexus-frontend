@@ -1,18 +1,85 @@
 <template>
-  <el-container style="height: 100vh; border: 1px solid #eee">
-    <el-header style="text-align: center; font-size: 20px; border-bottom: 1px solid #eee">
-      Agent聊天系统
-    </el-header>
-    <el-main class="chat-content">
-      <!-- 聊天消息区 -->
-      <div class="message-list">
-        <div class="message-item user">你好</div>
-        <div class="message-item agent">我是Agent，有什么可以帮你？</div>
+  <el-container class="layout">
+    <!-- 左侧侧边栏 -->
+    <el-aside width="260px" class="sidebar">
+      <!-- 文字 LOGO -->
+      <div class="logo-area">
+        <div class="logo-text">AI Chat</div>
       </div>
-      <!-- 输入区 -->
-      <div class="input-area">
-        <el-input v-model="inputContent" placeholder="输入消息..." class="input-field" />
-        <el-button type="primary" @click="sendMessage">发送</el-button>
+
+      <!-- 通用功能 -->
+      <div class="section-title">通用功能</div>
+
+      <div class="menu-btn">
+        <el-icon><ChatRound /></el-icon>
+        <span>新建对话</span>
+      </div>
+
+      <div class="menu-btn">
+        <el-icon><Key /></el-icon>
+        <span>密钥管理</span>
+      </div>
+
+      <div class="menu-btn">
+        <el-icon><DocumentAdd /></el-icon>
+        <span>任务创建</span>
+      </div>
+
+      <!-- 历史对话 -->
+      <div class="section-title" style="margin-top: 25px">历史对话</div>
+
+      <div class="history-list">
+        <div v-for="(item, index) in history" :key="index" class="history-item">
+          <el-icon><Menu /></el-icon>
+          <span class="text">{{ item }}</span>
+        </div>
+      </div>
+
+      <!-- 底部用户信息 -->
+      <div class="user-card">
+        <div class="u-info">
+          <div class="name">MOMO</div>
+          <div class="email">momo@MODAO.com</div>
+        </div>
+        <el-icon><MoreFilled /></el-icon>
+      </div>
+    </el-aside>
+
+    <!-- 主区域 -->
+    <el-main class="main-area">
+      <div class="welcome-container">
+        <div class="welcome-hi">你好，MOMO</div>
+        <div class="welcome-q">今天需要我帮你做点什么吗？</div>
+
+        <div class="input-box">
+          <!-- 输入框 -->
+          <el-input
+            type="textarea"
+            placeholder="请输入内容..."
+            v-model="inputContent"
+            :autosize="{ minRows: 3, maxRows: 3 }"
+            class="chat-input"
+          />
+
+          <!-- 底部工具栏 -->
+          <div class="input-footer">
+            <div class="left-tools">
+              <el-button text>
+                <el-icon><Picture /></el-icon> 上传图片
+              </el-button>
+              <el-button text>
+                <el-icon><Folder /></el-icon> 上传文档
+              </el-button>
+            </div>
+
+            <div class="right-tools">
+              <span>{{ inputContent.length }}/200</span>
+              <el-button circle type="primary" class="send-btn">
+                <el-icon><Promotion /></el-icon>
+              </el-button>
+            </div>
+          </div>
+        </div>
       </div>
     </el-main>
   </el-container>
@@ -20,86 +87,197 @@
 
 <script setup>
 import { ref } from 'vue'
-// import { useRouter } from 'vue-router' // 当前组件未使用路由，可以注释掉
+import {
+  ChatRound,
+  Key,
+  Menu,
+  MoreFilled,
+  Picture,
+  Folder,
+  Promotion,
+} from '@element-plus/icons-vue'
 
-// const router = useRouter()
 const inputContent = ref('')
+const usernameInitial = 'M' // 用户头像用首字母
 
-const sendMessage = () => {
-  if (!inputContent.value.trim()) return
-
-  // 实际项目这里要加消息发送逻辑
-  console.log('发送消息：', inputContent.value)
-
-  // 模拟添加消息到列表
-  // 在真实应用中，你会有一个 messages 数组来管理所有消息
-  // messages.value.push({ text: inputContent.value, sender: 'user' })
-
-  inputContent.value = ''
-}
+const history = [
+  '对话内容对话内容对话内容对话内容…',
+  '对话内容对话内容对话内容对话内容…',
+  '对话内容对话内容对话内容对话内容…',
+]
 </script>
 
 <style scoped>
-/* 使用 Element Plus 的变量来保持风格统一 */
-.el-header {
-  background-color: var(--el-bg-color);
-  color: var(--el-text-color-primary);
-  line-height: 60px;
+/* 主布局 */
+.layout {
+  height: 100vh;
+  background: #f8f8f9;
 }
 
-.chat-content {
+/* ---------------- 左侧区域 ---------------- */
+.sidebar {
+  background: #fff;
+  border-right: 1px solid #eee;
   display: flex;
   flex-direction: column;
   padding: 20px;
-  gap: 20px;
-  background-color: var(--el-bg-color-page);
-  overflow: hidden; /* 确保内容超出时不会影响整体布局 */
 }
 
-.message-list {
+/* 纯文字 LOGO */
+.logo-area {
+  margin-bottom: 25px;
+}
+
+.logo-text {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+/* 小标题 */
+.section-title {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 10px;
+  margin-top: 10px;
+}
+
+/* 侧边栏按钮 */
+.menu-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #333;
+}
+
+.menu-btn:hover {
+  background: #f2f2f3;
+}
+
+/* 历史记录 */
+.history-list {
   flex: 1;
   overflow-y: auto;
+  padding-right: 5px;
+  margin-top: 5px;
+}
+
+.history-item {
   display: flex;
-  flex-direction: column;
-  gap: 15px;
-  padding-bottom: 10px;
+  align-items: center;
+  gap: 10px;
+  background: #f7f7f7;
+  padding: 10px 12px;
+  border-radius: 10px;
+  margin-bottom: 10px;
+  cursor: pointer;
 }
 
-.message-item {
-  max-width: 70%;
-  padding: 12px 16px;
-  border-radius: 8px;
-  word-break: break-all; /* 防止长单词或URL破坏布局 */
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+.text {
+  font-size: 14px;
+  color: #333;
 }
 
-.user {
-  align-self: flex-end;
-  background: var(--el-color-primary);
-  color: white;
+/* 底部用户卡片 */
+.user-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-top: 1px solid #eee;
+  padding-top: 15px;
+  padding-bottom: 5px;
 }
 
-.agent {
-  align-self: flex-start;
-  background: var(--el-bg-color);
-  border: 1px solid var(--el-border-color);
-  color: var(--el-text-color-primary);
+/* 纯字母头像 */
+.avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #7a8cff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 16px;
 }
 
-.input-area {
+.u-info {
+  flex: 1;
+}
+
+.name {
+  font-weight: 600;
+}
+
+.email {
+  font-size: 12px;
+  color: #666;
+}
+
+/* ---------------- 右侧主区域 ---------------- */
+.main-area {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.welcome-container {
+  text-align: center;
+  width: 70%;
+}
+
+.welcome-hi {
+  font-size: 20px;
+  margin-bottom: 10px;
+  color: #555;
+}
+
+.welcome-q {
+  font-size: 22px;
+  font-weight: 600;
+  margin-bottom: 40px;
+}
+
+/* 输入卡片 */
+.input-box {
+  background: #fff;
+  padding: 20px;
+  border-radius: 16px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  width: 100%;
+}
+
+.chat-input {
+  width: 100%;
+}
+
+/* 底部工具栏 */
+.input-footer {
+  margin-top: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.left-tools {
   display: flex;
   gap: 10px;
-  align-items: flex-end; /* 确保输入框和按钮底部对齐 */
 }
 
-.input-field {
-  flex: 1;
-  /* Element Plus 的 el-input 默认有 border-radius，这里可以保持原样 */
+.right-tools {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  color: #777;
 }
 
-/* 可选：为输入框添加聚焦效果 */
-.input-field .el-input__inner:focus {
-  border-color: var(--el-color-primary);
-  box-shadow: 0 0 0 2px var(--el-color-primary-light-9);
+.send-btn {
+  background: #7a8cff;
+  border: none;
 }
 </style>
