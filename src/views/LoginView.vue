@@ -1,141 +1,135 @@
 <template>
-  <el-container style="height: 100vh; border: 1px solid #eee">
-    <el-main class="content">
-      <el-card class="auth-card" :header="modeTitle">
+  <div class="pixel-bg">
+    <div class="auth-wrapper">
+      <div class="auth-card pixel-border">
+        <h2 class="title">{{ modeTitle }}</h2>
+
         <el-form
           :model="form"
           :rules="dynamicRules"
           ref="formRef"
           label-position="top"
-          label-width="100px"
           size="default"
         >
-          <!-- 登录：用户名 -->
-          <el-form-item label="用户名" prop="loginId" v-if="showField('loginId')">
-            <el-input v-model="form.loginId" placeholder="请输入用户名" clearable />
-          </el-form-item>
+          <!-- 登录 -->
+          <template v-if="mode === 'login'">
+            <el-form-item label="用户名" prop="loginId">
+              <el-input v-model="form.loginId" placeholder="请输入用户名" clearable />
+            </el-form-item>
 
-          <!-- 注册：用户名 -->
-          <el-form-item label="用户名" prop="username" v-if="showField('username')">
-            <el-input
-              v-model="form.username"
-              placeholder="设置用户名（最长20个字符）"
-              clearable
-              maxlength="20"
-            />
-          </el-form-item>
+            <el-form-item label="密码" prop="password">
+              <el-input
+                type="password"
+                v-model="form.password"
+                placeholder="请输入密码"
+                show-password
+              />
+            </el-form-item>
 
-          <!-- 找回密码：用户名（必须） -->
-          <el-form-item label="用户名" prop="resetUsername" v-if="mode === 'reset'">
-            <el-input
-              v-model="form.resetUsername"
-              placeholder="请输入你的用户名"
-              clearable
-              maxlength="20"
-            />
-          </el-form-item>
-
-          <!-- 注册 + 找回密码：邮箱 -->
-          <el-form-item label="邮箱" prop="email" v-if="showField('email')">
-            <el-input v-model="form.email" placeholder="请输入邮箱地址" clearable />
-          </el-form-item>
-
-          <!-- 登录 & 注册：密码 -->
-          <el-form-item label="密码" prop="password" v-if="showField('password')">
-            <el-input
-              type="password"
-              v-model="form.password"
-              placeholder="请输入密码（至少8位，含大小写字母和数字）"
-              show-password
-            />
-          </el-form-item>
-
-          <!-- 注册：确认密码 -->
-          <el-form-item label="确认密码" prop="confirmPassword" v-if="showField('confirmPassword')">
-            <el-input
-              type="password"
-              v-model="form.confirmPassword"
-              placeholder="再次输入密码"
-              show-password
-            />
-          </el-form-item>
-
-          <!-- 找回密码：验证码（改为10位） -->
-          <el-form-item label="验证码" prop="code" v-if="showField('code')">
-            <el-row :gutter="12">
-              <el-col :span="15">
-                <el-input
-                  v-model="form.code"
-                  placeholder="输入10位验证码"
-                  maxlength="10"
-                  clearable
-                />
-              </el-col>
-              <el-col :span="9">
-                <el-button
-                  type="primary"
-                  plain
-                  size="default"
-                  :disabled="codeCountdown > 0 || loading"
-                  @click="sendResetCode"
-                  style="width: 100%"
-                >
-                  {{ codeCountdown > 0 ? `${codeCountdown}s` : '获取验证码' }}
-                </el-button>
-              </el-col>
-            </el-row>
-          </el-form-item>
-
-          <!-- 找回密码：新密码 -->
-          <el-form-item label="新密码" prop="newPassword" v-if="showField('newPassword')">
-            <el-input
-              type="password"
-              v-model="form.newPassword"
-              placeholder="设置新密码（至少8位，含大小写字母和数字）"
-              show-password
-            />
-          </el-form-item>
-
-          <!-- 登录页：记住我 + 忘记密码？ -->
-          <el-form-item v-if="mode === 'login'">
             <div class="login-options">
-              <el-checkbox v-model="form.remember" class="remember-me"> 记住我 </el-checkbox>
-              <div class="forget-link">
-                <el-button type="text" @click="switchMode('reset')"> 忘记密码？ </el-button>
-              </div>
+              <el-checkbox v-model="form.remember">记住我</el-checkbox>
+              <el-button type="text" class="link" @click="switchMode('reset')">
+                忘记密码？
+              </el-button>
             </div>
-          </el-form-item>
+          </template>
 
-          <!-- 提交按钮区 -->
-          <el-form-item>
-            <el-button type="primary" :loading="loading" @click="handleSubmit" class="login-btn">
-              {{ mainButtonText }}
-            </el-button>
+          <!-- 注册 -->
+          <template v-if="mode === 'register'">
+            <el-form-item label="用户名" prop="username">
+              <el-input v-model="form.username" placeholder="设置用户名" clearable />
+            </el-form-item>
 
-            <el-button
-              v-if="mode === 'login'"
-              type="text"
-              @click="quickRegister"
-              class="register-btn"
-            >
-              没有账号？立即注册
-            </el-button>
+            <el-form-item label="邮箱" prop="email">
+              <el-input v-model="form.email" placeholder="请输入邮箱" clearable />
+            </el-form-item>
 
-            <el-button
-              v-if="mode !== 'login'"
-              type="text"
-              @click="switchMode('login')"
-              class="return-btn"
-            >
-              返回登录
-            </el-button>
-          </el-form-item>
+            <el-form-item label="密码" prop="password">
+              <el-input
+                type="password"
+                v-model="form.password"
+                placeholder="设置密码"
+                show-password
+              />
+            </el-form-item>
+
+            <el-form-item label="确认密码" prop="confirmPassword">
+              <el-input
+                type="password"
+                v-model="form.confirmPassword"
+                placeholder="再次输入密码"
+                show-password
+              />
+            </el-form-item>
+          </template>
+
+          <!-- 找回密码 -->
+          <template v-if="mode === 'reset'">
+            <el-form-item label="用户名" prop="resetUsername">
+              <el-input v-model="form.resetUsername" placeholder="请输入用户名" clearable />
+            </el-form-item>
+
+            <el-form-item label="邮箱" prop="email">
+              <el-input v-model="form.email" placeholder="请输入邮箱" clearable />
+            </el-form-item>
+
+            <el-form-item label="验证码" prop="code">
+              <el-row :gutter="8">
+                <el-col :span="14">
+                  <el-input v-model="form.code" placeholder="10位验证码" maxlength="10" clearable />
+                </el-col>
+                <el-col :span="10">
+                  <el-button
+                    type="primary"
+                    class="pixel-btn"
+                    :disabled="codeCountdown > 0 || loading"
+                    @click="sendResetCode"
+                    style="width: 100%"
+                  >
+                    {{ codeCountdown > 0 ? `${codeCountdown}s` : '获取验证码' }}
+                  </el-button>
+                </el-col>
+              </el-row>
+            </el-form-item>
+
+            <el-form-item label="新密码" prop="newPassword">
+              <el-input
+                type="password"
+                v-model="form.newPassword"
+                placeholder="设置新密码"
+                show-password
+              />
+            </el-form-item>
+          </template>
+
+          <!-- 按钮 -->
+          <el-button
+            type="primary"
+            :loading="loading"
+            class="submit-btn pixel-btn"
+            @click="handleSubmit"
+          >
+            {{ mainButtonText }}
+          </el-button>
+
+          <el-button
+            v-if="mode === 'login'"
+            type="text"
+            class="link"
+            @click="switchMode('register')"
+          >
+            没有账号？立即注册
+          </el-button>
+
+          <el-button v-if="mode !== 'login'" type="text" class="link" @click="switchMode('login')">
+            返回登录
+          </el-button>
         </el-form>
-      </el-card>
-    </el-main>
+      </div>
 
-    <el-footer class="footer">© 2025 Chemical Platform</el-footer>
-  </el-container>
+      <footer class="footer">© 2025 Chemical Platform</footer>
+    </div>
+  </div>
 </template>
 
 <script setup>
@@ -387,63 +381,91 @@ function quickRegister() {
 </script>
 
 <style scoped>
-.content {
+/* 渐变天空背景 */
+.pixel-bg {
+  height: 100vh;
+  width: 100%;
+  background: linear-gradient(to bottom, #fceec7, #9be0f5, #74c7f7);
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 0;
-  background-color: var(--el-bg-color-page);
-  height: calc(100vh - 44px);
+  font-family: 'PixelOperator', monospace;
 }
 
-.auth-card {
-  width: 400px;
-  max-width: 90%;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
-}
-
-.login-options {
+/* 主布局 */
+.auth-wrapper {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  align-items: center;
 }
 
-.remember-me {
-  margin: 0;
+/* 像素风外框 */
+.pixel-border {
+  border: 4px solid #222;
+  padding: 28px;
+  background: #ffffffdd;
+  box-shadow: 0 0 0 4px #000 inset;
+  border-radius: 4px;
+  width: 420px;
+  animation: cardPop 0.4s ease-out;
 }
 
-.forget-link {
-  text-align: right;
-  margin: 0;
+/* 卡片弹出动画 */
+@keyframes cardPop {
+  0% {
+    transform: scale(0.85);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
-.forget-link :deep(.el-button) {
-  color: var(--el-text-color-secondary);
-  font-size: 13px;
-  padding: 0;
-}
-
-.forget-link :deep(.el-button:hover) {
-  color: var(--el-color-primary);
-}
-
-.footer {
+.title {
   text-align: center;
-  font-size: 12px;
-  padding: 12px;
-  color: var(--el-text-color-secondary);
-  border-top: 1px solid var(--el-border-color);
-  height: 44px;
+  font-size: 22px;
+  font-weight: bold;
+  margin-bottom: 20px;
 }
 
-.login-btn {
+/* 像素按钮风格 */
+.pixel-btn {
+  font-size: 16px !important;
+  border: 3px solid #000 !important;
+  padding: 10px 0 !important;
+  background: #ffe97f !important;
+  box-shadow: 4px 4px 0 #000;
+  transition: transform 0.1s ease;
+}
+
+.pixel-btn:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 #000;
+}
+
+.pixel-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 #000;
+}
+
+.submit-btn {
   width: 100%;
+  margin-top: 12px;
 }
 
-.register-btn,
-.return-btn {
+/* 文本链接按钮 */
+.link {
   width: 100%;
   margin-top: 10px;
-  color: var(--el-color-primary);
+  font-size: 14px;
+  text-align: center;
+}
+
+/* 底部版权 */
+.footer {
+  margin-top: 20px;
+  font-size: 13px;
+  opacity: 0.7;
 }
 </style>
