@@ -16,7 +16,7 @@
 
       <div class="menu-btn" :class="{ active: currentView === 'keys' }" @click="switchView('keys')">
         <el-icon><Key /></el-icon>
-        <span>密钥管理</span>
+        <span>配置管理</span>
       </div>
 
       <div
@@ -57,7 +57,7 @@
         <div class="placeholder-content">
           <el-icon size="60" color="#ddd" v-if="currentView === 'keys'"><Key /></el-icon>
           <el-icon size="60" color="#ddd" v-else><DocumentAdd /></el-icon>
-          <h2>{{ currentView === 'keys' ? '密钥管理面板' : '任务创建中心' }}</h2>
+          <h2>{{ currentView === 'keys' ? '配置管理面板' : '任务创建中心' }}</h2>
           <p>这里是功能占位演示，点击左侧“新建对话”返回聊天。</p>
         </div>
       </div>
