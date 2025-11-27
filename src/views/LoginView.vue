@@ -4,33 +4,48 @@
       <el-card class="auth-card" :header="modeTitle">
         <el-form
           :model="form"
-          :rules="rules"
+          :rules="dynamicRules"
           ref="formRef"
           label-position="top"
           label-width="100px"
           size="default"
         >
-          <!-- 登录：单一输入框（用户名/邮箱） -->
-          <el-form-item label="用户名/邮箱" prop="loginId" v-if="showField('loginId')">
-            <el-input v-model="form.loginId" placeholder="请输入用户名或邮箱" />
+          <!-- 登录：用户名 -->
+          <el-form-item label="用户名" prop="loginId" v-if="showField('loginId')">
+            <el-input v-model="form.loginId" placeholder="请输入用户名" clearable />
           </el-form-item>
 
-          <!-- 注册：单独的用户名 -->
+          <!-- 注册：用户名 -->
           <el-form-item label="用户名" prop="username" v-if="showField('username')">
-            <el-input v-model="form.username" placeholder="请设置用户名" />
+            <el-input
+              v-model="form.username"
+              placeholder="设置用户名（最长20个字符）"
+              clearable
+              maxlength="20"
+            />
           </el-form-item>
 
-          <!-- 注册/找回密码：单独的邮箱 -->
+          <!-- 找回密码：用户名（必须） -->
+          <el-form-item label="用户名" prop="resetUsername" v-if="mode === 'reset'">
+            <el-input
+              v-model="form.resetUsername"
+              placeholder="请输入你的用户名"
+              clearable
+              maxlength="20"
+            />
+          </el-form-item>
+
+          <!-- 注册 + 找回密码：邮箱 -->
           <el-form-item label="邮箱" prop="email" v-if="showField('email')">
-            <el-input v-model="form.email" placeholder="请输入邮箱" />
+            <el-input v-model="form.email" placeholder="请输入邮箱地址" clearable />
           </el-form-item>
 
-          <!-- 登录/注册：密码 -->
+          <!-- 登录 & 注册：密码 -->
           <el-form-item label="密码" prop="password" v-if="showField('password')">
             <el-input
               type="password"
               v-model="form.password"
-              placeholder="请输入密码"
+              placeholder="请输入密码（至少8位，含大小写字母和数字）"
               show-password
             />
           </el-form-item>
@@ -45,20 +60,27 @@
             />
           </el-form-item>
 
-          <!-- 找回密码：验证码 -->
-          <el-form-item label="邮箱验证码" prop="code" v-if="showField('code')">
+          <!-- 找回密码：验证码（改为10位） -->
+          <el-form-item label="验证码" prop="code" v-if="showField('code')">
             <el-row :gutter="12">
-              <el-col :span="14">
-                <el-input v-model="form.code" placeholder="输入验证码" />
+              <el-col :span="15">
+                <el-input
+                  v-model="form.code"
+                  placeholder="输入10位验证码"
+                  maxlength="10"
+                  clearable
+                />
               </el-col>
-              <el-col :span="10">
+              <el-col :span="9">
                 <el-button
-                  type="text"
+                  type="primary"
+                  plain
+                  size="default"
                   :disabled="codeCountdown > 0 || loading"
                   @click="sendResetCode"
-                  class="verify-btn"
+                  style="width: 100%"
                 >
-                  {{ codeCountdown > 0 ? `${codeCountdown}s 后重新发送` : '发送验证码' }}
+                  {{ codeCountdown > 0 ? `${codeCountdown}s` : '获取验证码' }}
                 </el-button>
               </el-col>
             </el-row>
@@ -69,40 +91,38 @@
             <el-input
               type="password"
               v-model="form.newPassword"
-              placeholder="设置新密码"
+              placeholder="设置新密码（至少8位，含大小写字母和数字）"
               show-password
             />
           </el-form-item>
 
+          <!-- 登录页：记住我 + 忘记密码？ -->
           <el-form-item v-if="mode === 'login'">
-            <div class="flex-between">
-              <el-checkbox v-model="form.remember">记住我</el-checkbox>
-              <el-button type="text" @click="switchMode('reset')">忘记密码?</el-button>
+            <div class="login-options">
+              <el-checkbox v-model="form.remember" class="remember-me"> 记住我 </el-checkbox>
+              <div class="forget-link">
+                <el-button type="text" @click="switchMode('reset')"> 忘记密码？ </el-button>
+              </div>
             </div>
           </el-form-item>
 
+          <!-- 提交按钮区 -->
           <el-form-item>
             <el-button type="primary" :loading="loading" @click="handleSubmit" class="login-btn">
               {{ mainButtonText }}
             </el-button>
+
             <el-button
               v-if="mode === 'login'"
               type="text"
               @click="quickRegister"
               class="register-btn"
             >
-              快速注册
+              没有账号？立即注册
             </el-button>
+
             <el-button
-              v-if="mode === 'register'"
-              type="text"
-              @click="switchMode('login')"
-              class="return-btn"
-            >
-              已有账号？去登录
-            </el-button>
-            <el-button
-              v-if="mode === 'reset'"
+              v-if="mode !== 'login'"
               type="text"
               @click="switchMode('login')"
               class="return-btn"
@@ -113,6 +133,7 @@
         </el-form>
       </el-card>
     </el-main>
+
     <el-footer class="footer">© 2025 Chemical Platform</el-footer>
   </el-container>
 </template>
@@ -121,267 +142,291 @@
 import { ref, computed, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import userServiceApi from '@/api/auth'
 
 const router = useRouter()
 
-// 模式：login(登录)/register(注册)/reset(找回密码)
 const mode = ref('login')
 const loading = ref(false)
 const codeCountdown = ref(0)
 let codeTimer = null
 
 const formRef = ref(null)
-// 表单数据（新增loginId，注册页单独用username和email）
+
 const form = ref({
-  loginId: '', // 登录页：用户名/邮箱输入框
-  username: '', // 注册页：单独用户名
-  email: '', // 注册/找回密码：单独邮箱
-  password: '', // 登录/注册：密码
-  confirmPassword: '', // 注册：确认密码
-  remember: true, // 登录：记住我
-  code: '', // 找回密码：验证码
-  newPassword: '', // 找回密码：新密码
+  loginId: '',
+  username: '',
+  resetUsername: '',
+  email: '',
+  password: '',
+  confirmPassword: '',
+  remember: true,
+  code: '',
+  newPassword: '',
 })
 
-// 表单验证规则（按模式动态生效）
+// 密码强度正则
+const passwordPattern = /^(?=.*\d)(?=.*[a-z])(?=.*[A-Z]).{8,}$/
+
 const rules = {
-  // 登录：用户名/邮箱（支持两种格式）
-  loginId: [
-    { required: true, message: '请输入用户名或邮箱', trigger: ['blur', 'input'] },
-    {
-      validator: (_, value) => {
-        // 允许用户名（字母/数字/下划线，3-20位）或邮箱格式
-        const emailReg = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-        const usernameReg = /^[a-zA-Z0-9_]{3,20}$/
-        if (emailReg.test(value) || usernameReg.test(value)) {
-          return Promise.resolve()
-        }
-        return Promise.reject(new Error('请输入有效的用户名（3-20位字母/数字/下划线）或邮箱'))
-      },
-      trigger: ['blur', 'input'],
-    },
-  ],
+  loginId: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
 
-  // 注册：用户名（单独验证）
   username: [
-    { required: true, message: '请设置用户名', trigger: ['blur', 'input'] },
-    { min: 3, max: 20, message: '用户名长度为3-20位', trigger: ['blur', 'input'] },
+    { required: true, message: '请设置用户名', trigger: 'blur' },
+    { max: 20, message: '用户名长度不能超过20个字符', trigger: 'blur' },
+  ],
+
+  resetUsername: [
+    { required: true, message: '请输入用户名', trigger: 'blur' },
+    { max: 20, message: '用户名长度不能超过20个字符', trigger: 'blur' },
+  ],
+
+  email: [
+    { required: true, message: '请输入邮箱', trigger: 'blur' },
+    { type: 'email', message: '邮箱格式不正确', trigger: 'blur' },
+  ],
+
+  password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
+
+  passwordForRegister: [
+    { required: true, message: '请输入密码', trigger: 'blur' },
     {
-      pattern: /^[a-zA-Z0-9_]+$/,
-      message: '用户名只能包含字母、数字和下划线',
-      trigger: ['blur', 'input'],
+      pattern: passwordPattern,
+      message: '密码需包含数字、大小写字母，并且至少8位',
+      trigger: 'blur',
     },
   ],
 
-  // 注册/找回密码：邮箱（单独验证）
-  email: [
-    { required: true, message: '请输入邮箱', trigger: ['blur', 'input'] },
-    { type: 'email', message: '邮箱格式不正确', trigger: ['blur', 'input'] },
-  ],
-
-  // 登录/注册：密码
-  password: [
-    { required: true, message: '请输入密码', trigger: ['blur', 'input'] },
-    { min: 6, max: 20, message: '密码长度为6-20位', trigger: ['blur', 'input'] },
-  ],
-
-  // 注册：确认密码
   confirmPassword: [
-    { required: true, message: '请确认密码', trigger: ['blur', 'input'] },
-    ({ getFieldValue }) => ({
-      validator: (_, value) => {
-        if (!value || getFieldValue('password') === value) {
-          return Promise.resolve()
-        }
-        return Promise.reject(new Error('两次输入的密码不一致'))
+    { required: true, message: '请确认密码', trigger: 'blur' },
+    {
+      validator: (_, value, cb) => {
+        if (value === form.value.password) cb()
+        else cb(new Error('两次输入的密码不一致'))
       },
-      trigger: ['blur', 'input'],
-    }),
+      trigger: 'blur',
+    },
   ],
 
-  // 找回密码：验证码
-  code: [{ required: true, message: '请输入验证码', trigger: ['blur', 'input'] }],
+  // 关键修改：验证码改为 10 位
+  code: [
+    { required: true, message: '请输入验证码', trigger: 'blur' },
+    { len: 10, message: '验证码为10位字母', trigger: 'blur' },
+    // 如果你想强制只能是字母，也可以加上这个正则（可选）
+    // { pattern: /^[A-Za-z]{10}$/, message: '验证码必须为10位字母', trigger: 'blur' }
+  ],
 
-  // 找回密码：新密码
   newPassword: [
-    { required: true, message: '请设置新密码', trigger: ['blur', 'input'] },
-    { min: 6, max: 20, message: '新密码长度为6-20位', trigger: ['blur', 'input'] },
+    { required: true, message: '请设置新密码', trigger: 'blur' },
+    {
+      pattern: passwordPattern,
+      message: '密码需包含数字、大小写字母，并且至少8位',
+      trigger: 'blur',
+    },
   ],
 }
 
-// 动态标题
-const modeTitle = computed(() => {
-  switch (mode.value) {
-    case 'login':
-      return '用户登录'
-    case 'register':
-      return '注册新账号'
-    case 'reset':
-      return '找回密码'
-  }
+// 动态密码规则
+const passwordRules = computed(() => {
+  if (mode.value === 'login') return rules.password
+  if (mode.value === 'register') return rules.passwordForRegister
+  if (mode.value === 'reset') return rules.newPassword
+  return []
 })
 
-// 主按钮文本
-const mainButtonText = computed(() => {
-  switch (mode.value) {
-    case 'login':
-      return '登录'
-    case 'register':
-      return '提交注册'
-    case 'reset':
-      return '重置密码'
-  }
-})
+const dynamicRules = computed(() => ({
+  ...rules,
+  password: passwordRules.value,
+}))
 
-/**
- * 切换模式（登录/注册/找回密码）
- * @param {string} next - 目标模式
- */
+const modeTitle = computed(
+  () =>
+    ({
+      login: '用户登录',
+      register: '注册新账号',
+      reset: '找回密码',
+    })[mode.value],
+)
+
+const mainButtonText = computed(
+  () =>
+    ({
+      login: '登录',
+      register: '提交注册',
+      reset: '完成重置',
+    })[mode.value],
+)
+
 function switchMode(next) {
   mode.value = next
-  formRef.value?.clearValidate() // 清除表单验证
-  // 重置表单（保留remember状态）
-  form.value = {
-    ...form.value,
-    loginId: '',
-    username: '',
-    email: '',
-    password: '',
-    confirmPassword: '',
-    code: '',
-    newPassword: '',
-  }
-  clearCountdown() // 清除验证码倒计时
+  formRef.value?.resetFields()
+  Object.keys(form.value).forEach((key) => {
+    if (key !== 'remember') form.value[key] = ''
+  })
+  clearCountdown()
 }
 
-/**
- * 控制字段显示/隐藏
- * @param {string} field - 字段名
- * @returns {boolean} 是否显示
- */
 function showField(field) {
-  if (mode.value === 'login') {
-    // 登录页只显示：用户名/邮箱、密码
-    return ['loginId', 'password'].includes(field)
-  }
-  if (mode.value === 'register') {
-    // 注册页显示：用户名、邮箱、密码、确认密码
+  if (mode.value === 'login') return ['loginId', 'password'].includes(field)
+  if (mode.value === 'register')
     return ['username', 'email', 'password', 'confirmPassword'].includes(field)
-  }
-  if (mode.value === 'reset') {
-    // 找回密码显示：邮箱、验证码、新密码
-    return ['email', 'code', 'newPassword'].includes(field)
-  }
+  if (mode.value === 'reset')
+    return ['resetUsername', 'email', 'code', 'newPassword'].includes(field)
   return false
 }
 
-/**
- * 提交表单（登录/注册/重置密码）
- */
-async function handleSubmit() {
-  await formRef.value?.validate((valid) => {
-    if (!valid) {
-      ElMessage.error('请修正表单错误后再提交')
-      return false
-    }
-
-    loading.value = true
-    // 模拟API请求（实际项目替换为真实接口）
-    setTimeout(() => {
-      loading.value = false
-      if (mode.value === 'login') {
-        ElMessage.success('登录成功')
-        router.push('/dashboard') // 登录成功跳转到首页
-      } else if (mode.value === 'register') {
-        ElMessage.success('注册成功，请登录')
-        switchMode('login') // 注册成功切换到登录页
-      } else if (mode.value === 'reset') {
-        ElMessage.success('密码重置成功，请登录')
-        switchMode('login') // 重置成功切换到登录页
-      }
-    }, 1000)
+// 接口调用（保持不变）
+async function register() {
+  const res = await userServiceApi.post('/register', {
+    username: form.value.username.trim(),
+    password: form.value.password,
+    email: form.value.email.trim(),
   })
+  if (res.data.code === 0) {
+    ElMessage.success('注册成功，请登录')
+    switchMode('login')
+  } else {
+    ElMessage.error(res.data.message || '注册失败')
+  }
 }
 
-/**
- * 发送找回密码验证码
- */
-function sendResetCode() {
-  if (!form.value.email) {
-    ElMessage.warning('请先填写邮箱')
+async function login() {
+  const res = await userServiceApi.post('/login', {
+    username: form.value.loginId.trim(),
+    password: form.value.password,
+  })
+
+  if (res.data.code === 0) {
+    const { token, userId, username, email } = res.data.data
+    localStorage.setItem('token', token)
+    localStorage.setItem('userId', userId)
+    localStorage.setItem('username', username)
+    localStorage.setItem('email', email || '')
+
+    ElMessage.success('登录成功')
+    router.push('/dashboard')
+  } else {
+    ElMessage.error(res.data.message || '用户名或密码错误')
+  }
+}
+
+async function sendResetCode() {
+  if (!form.value.resetUsername.trim() || !form.value.email.trim()) {
+    ElMessage.warning('请填写用户名和邮箱')
     return
   }
   if (codeCountdown.value > 0) return
 
-  // 验证邮箱格式（复用rules中的email规则）
-  const emailRule = rules.email[1]
-  emailRule.validator(undefined, form.value.email).catch((err) => {
-    ElMessage.warning(err.message)
-    return
-  })
+  try {
+    const res = await userServiceApi.post('/reset/mail-code', {
+      username: form.value.resetUsername.trim(),
+      email: form.value.email.trim(),
+    })
 
-  // 模拟发送验证码API（实际项目替换为真实接口）
-  ElMessage.success('验证码已发送到您的邮箱')
-  codeCountdown.value = 60
-  codeTimer = setInterval(() => {
-    codeCountdown.value--
-    if (codeCountdown.value <= 0) {
-      clearCountdown()
+    if (res.data.code === 0) {
+      ElMessage.success('验证码已发送，请查收邮箱')
+      codeCountdown.value = 60
+      codeTimer = setInterval(() => {
+        codeCountdown.value--
+        if (codeCountdown.value <= 0) clearInterval(codeTimer)
+      }, 1000)
+    } else {
+      ElMessage.error(res.data.message || '发送失败')
     }
-  }, 1000)
+  } catch (err) {
+    ElMessage.error('发送验证码失败，请检查用户名和邮箱是否正确')
+  }
 }
 
-/**
- * 清除验证码倒计时
- */
-function clearCountdown() {
-  if (codeTimer) {
-    clearInterval(codeTimer)
-    codeTimer = null
+async function resetPassword() {
+  try {
+    const res = await userServiceApi.post('/reset', {
+      username: form.value.resetUsername.trim(),
+      email: form.value.email.trim(),
+      newPassword: form.value.newPassword,
+      verifyCode: form.value.code,
+    })
+
+    if (res.data.code === 0) {
+      ElMessage.success('密码重置成功，请重新登录')
+      switchMode('login')
+    } else {
+      ElMessage.error(res.data.message || '重置失败')
+    }
+  } catch (err) {
+    ElMessage.error('重置密码失败')
   }
+}
+
+async function handleSubmit() {
+  if (!formRef.value) return
+
+  await formRef.value.validate(async (valid) => {
+    if (!valid) return
+    loading.value = true
+    try {
+      if (mode.value === 'login') await login()
+      else if (mode.value === 'register') await register()
+      else if (mode.value === 'reset') await resetPassword()
+    } finally {
+      loading.value = false
+    }
+  })
+}
+
+function clearCountdown() {
+  if (codeTimer) clearInterval(codeTimer)
   codeCountdown.value = 0
 }
 
-// 组件卸载时清除定时器（防止内存泄漏）
-onUnmounted(() => {
-  clearCountdown()
-})
+onUnmounted(clearCountdown)
 
-/**
- * 快速注册（登录页跳转注册）
- */
 function quickRegister() {
   switchMode('register')
 }
 </script>
 
 <style scoped>
-/* 内容区样式：垂直+水平居中 */
 .content {
   display: flex;
   justify-content: center;
   align-items: center;
   padding: 0;
   background-color: var(--el-bg-color-page);
-  height: calc(100vh - 44px); /* 减去页脚高度 */
+  height: calc(100vh - 44px);
 }
+
 .auth-card {
-  width: 380px;
+  width: 400px;
   max-width: 90%;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
 }
 
-/* 表单样式 */
-.el-form-item {
-  margin-bottom: 20px;
-}
-.flex-between {
+.login-options {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  gap: 12px;
 }
 
-/* 页脚样式 */
+.remember-me {
+  margin: 0;
+}
+
+.forget-link {
+  text-align: right;
+  margin: 0;
+}
+
+.forget-link :deep(.el-button) {
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+  padding: 0;
+}
+
+.forget-link :deep(.el-button:hover) {
+  color: var(--el-color-primary);
+}
+
 .footer {
   text-align: center;
   font-size: 12px;
@@ -391,17 +436,14 @@ function quickRegister() {
   height: 44px;
 }
 
-/* 按钮样式 */
 .login-btn {
   width: 100%;
 }
+
 .register-btn,
 .return-btn {
   width: 100%;
+  margin-top: 10px;
   color: var(--el-color-primary);
-}
-.verify-btn {
-  width: 100%;
-  padding: 0;
 }
 </style>
