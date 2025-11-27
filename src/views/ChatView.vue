@@ -4,11 +4,8 @@
     <el-aside width="260px" class="sidebar">
       <!-- 文字 LOGO -->
       <div class="logo-area">
-        <div class="logo-text">AI Chat</div>
+        <div class="logo-text">Chemical AI Chat</div>
       </div>
-
-      <!-- 通用功能 -->
-      <div class="section-title">通用功能</div>
 
       <div class="menu-btn">
         <el-icon><ChatRound /></el-icon>
