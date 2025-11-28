@@ -43,14 +43,12 @@
         </div>
       </div>
 
-      <!-- 用户信息区域 + 退出登录下拉菜单（已修复） -->
       <div class="user-card">
         <div class="u-info">
           <div class="name">{{ username }}</div>
           <div class="email">{{ email || '未设置邮箱' }}</div>
         </div>
 
-        <!-- 点击这个“更多”图标弹出退出登录 -->
         <el-dropdown trigger="click" @command="handleUserCommand">
           <el-icon class="more-icon"><MoreFilled /></el-icon>
           <template #dropdown>
@@ -63,11 +61,130 @@
     </el-aside>
 
     <el-main class="main-area">
-      <div v-if="currentView !== 'chat'" class="placeholder-view">
+      <div v-if="currentView === 'keys'" class="config-view-wrapper">
+        <div class="config-card">
+          <div class="config-header">
+            <div class="header-left">
+              <h2>模型配置管理</h2>
+              <p class="subtitle">管理您的 LLM API 密钥与模型参数配置</p>
+            </div>
+            <el-button type="primary" class="add-btn" @click="openCreateConfig">
+              <el-icon style="margin-right: 4px"><Plus /></el-icon> 新增配置
+            </el-button>
+          </div>
+
+          <div class="table-container">
+            <el-table
+              :data="configList"
+              v-loading="loadingConfigs"
+              style="width: 100%"
+              height="100%"
+              :header-cell-style="{ background: '#f8f8f9', color: '#666', fontWeight: '600' }"
+            >
+              <el-table-column prop="configurationName" label="配置名称" min-width="140" />
+              <el-table-column prop="llmModelId" label="模型 ID" min-width="120" />
+              <el-table-column
+                prop="baseUrl"
+                label="Base URL"
+                min-width="180"
+                show-overflow-tooltip
+              />
+              <el-table-column prop="temperature" label="温度" width="80" align="center">
+                <template #default="scope">
+                  <el-tag size="small" type="info">{{ scope.row.temperature }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="API Key" width="100" align="center">
+                <template #default>
+                  <span style="color: #999; font-family: monospace">••••••</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="140" fixed="right" align="center">
+                <template #default="scope">
+                  <el-button link type="primary" size="small" @click="openEditConfig(scope.row)">
+                    编辑
+                  </el-button>
+                  <el-divider direction="vertical" />
+                  <el-button link type="danger" size="small" @click="handleDeleteConfig(scope.row)">
+                    删除
+                  </el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+        </div>
+
+        <el-dialog
+          v-model="configDialogVisible"
+          :title="isEditMode ? '编辑配置' : '新增配置'"
+          width="480px"
+          class="custom-dialog"
+          destroy-on-close
+          align-center
+        >
+          <el-form
+            :model="configForm"
+            :rules="configRules"
+            ref="configFormRef"
+            label-position="top"
+          >
+            <el-form-item label="配置名称" prop="configurationName">
+              <el-input
+                v-model="configForm.configurationName"
+                placeholder="给您的配置起个名字 (如: My GPT-4)"
+                :disabled="isEditMode"
+              />
+              <div v-if="isEditMode" class="form-tip">名称作为唯一标识不可修改</div>
+            </el-form-item>
+
+            <el-row :gutter="20">
+              <el-col :span="12">
+                <el-form-item label="模型 ID" prop="llmModelId">
+                  <el-input v-model="configForm.llmModelId" placeholder="如: qwen-max" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="温度 (Temperature)" prop="temperature">
+                  <el-input-number
+                    v-model="configForm.temperature"
+                    :min="0"
+                    :max="1"
+                    :step="0.1"
+                    controls-position="right"
+                    style="width: 100%"
+                  />
+                </el-form-item>
+              </el-col>
+            </el-row>
+
+            <el-form-item label="Base URL" prop="baseUrl">
+              <el-input v-model="configForm.baseUrl" placeholder="https://api.example.com/v1" />
+            </el-form-item>
+
+            <el-form-item label="API Key" prop="apiKey">
+              <el-input
+                v-model="configForm.apiKey"
+                type="password"
+                show-password
+                placeholder="sk-..."
+              />
+            </el-form-item>
+          </el-form>
+          <template #footer>
+            <div class="dialog-footer">
+              <el-button @click="configDialogVisible = false">取消</el-button>
+              <el-button type="primary" :loading="submittingConfig" @click="submitConfig">
+                保存配置
+              </el-button>
+            </div>
+          </template>
+        </el-dialog>
+      </div>
+
+      <div v-else-if="currentView === 'tasks'" class="placeholder-view">
         <div class="placeholder-content">
-          <el-icon size="60" color="#ddd" v-if="currentView === 'keys'"><Key /></el-icon>
-          <el-icon size="60" color="#ddd" v-else><DocumentAdd /></el-icon>
-          <h2>{{ currentView === 'keys' ? '配置管理面板' : '任务创建中心' }}</h2>
+          <el-icon size="60" color="#ddd"><DocumentAdd /></el-icon>
+          <h2>任务创建中心</h2>
           <p>这里是功能占位演示，点击左侧“新建对话”返回聊天。</p>
         </div>
       </div>
@@ -134,7 +251,7 @@
 </template>
 
 <script setup>
-import { ref, nextTick, onMounted } from 'vue'
+import { ref, reactive, nextTick, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   ChatRound,
@@ -144,38 +261,177 @@ import {
   DocumentAdd,
   Promotion,
   Loading,
+  Plus,
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const router = useRouter()
+const API_BASE_URL = 'http://localhost:9002/api/chat-service'
 
 // ---------- 用户信息 ----------
 const username = ref('加载中...')
 const email = ref('')
+const userId = ref(null)
 
 const loadUserInfo = () => {
   const storedUsername = localStorage.getItem('username')
   const storedEmail = localStorage.getItem('email')
+  const storedUserId = localStorage.getItem('userId')
 
   if (storedUsername) {
     username.value = storedUsername
     email.value = storedEmail || '未设置邮箱'
+    userId.value = storedUserId || 123456
+
+    if (currentView.value === 'keys') {
+      fetchConfigs()
+    }
   } else {
     ElMessage.warning('请先登录')
     router.push('/login')
   }
 }
 
-// ---------- 其他状态 ----------
+// ---------- 视图状态 ----------
 const currentView = ref('chat')
+const switchView = (viewName) => {
+  currentView.value = viewName
+  if (viewName === 'keys') {
+    fetchConfigs()
+  }
+}
+
+// ---------- 配置管理逻辑 ----------
+const configList = ref([])
+const loadingConfigs = ref(false)
+const configDialogVisible = ref(false)
+const isEditMode = ref(false)
+const submittingConfig = ref(false)
+const configFormRef = ref(null)
+
+const configForm = reactive({
+  configurationName: '',
+  apiKey: '',
+  baseUrl: '',
+  llmModelId: '',
+  temperature: 0.7,
+})
+
+const configRules = {
+  configurationName: [
+    { required: true, message: '请输入配置名称', trigger: 'blur' },
+    { min: 2, max: 30, message: '长度在 2 到 30 个字符', trigger: 'blur' },
+  ],
+  llmModelId: [
+    { required: true, message: '请输入模型ID', trigger: 'blur' },
+    { max: 50, message: '长度不可超过 50 个字符', trigger: 'blur' },
+  ],
+  baseUrl: [{ required: true, message: '请输入Base URL', trigger: 'blur' }],
+  apiKey: [{ required: true, message: '请输入API Key', trigger: 'blur' }],
+  temperature: [{ required: true, message: '请选择温度', trigger: 'change' }],
+}
+
+const fetchConfigs = async () => {
+  if (!userId.value) return
+  loadingConfigs.value = true
+  try {
+    const response = await fetch(`${API_BASE_URL}/llm-configuration/users/${userId.value}`)
+    const res = await response.json()
+    if (res.code === 0) {
+      configList.value = res.data || []
+    } else {
+      ElMessage.error(res.message || '获取配置列表失败')
+    }
+  } catch (error) {
+    ElMessage.error('网络请求失败')
+  } finally {
+    loadingConfigs.value = false
+  }
+}
+
+const openCreateConfig = () => {
+  isEditMode.value = false
+  configForm.configurationName = ''
+  configForm.apiKey = ''
+  configForm.baseUrl = ''
+  configForm.llmModelId = ''
+  configForm.temperature = 0.7
+  configDialogVisible.value = true
+}
+
+const openEditConfig = (row) => {
+  isEditMode.value = true
+  configForm.configurationName = row.configurationName
+  configForm.apiKey = row.apiKey
+  configForm.baseUrl = row.baseUrl
+  configForm.llmModelId = row.llmModelId
+  configForm.temperature = row.temperature
+  configDialogVisible.value = true
+}
+
+const submitConfig = async () => {
+  if (!configFormRef.value) return
+  await configFormRef.value.validate(async (valid) => {
+    if (valid) {
+      submittingConfig.value = true
+      try {
+        const method = isEditMode.value ? 'PUT' : 'POST'
+        const response = await fetch(`${API_BASE_URL}/llm-configuration/users/${userId.value}`, {
+          method: method,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(configForm),
+        })
+        const res = await response.json()
+
+        if (res.code === 0) {
+          ElMessage.success(isEditMode.value ? '更新成功' : '创建成功')
+          configDialogVisible.value = false
+          fetchConfigs()
+        } else {
+          ElMessage.error(res.message || '操作失败')
+        }
+      } catch (error) {
+        ElMessage.error('网络请求错误')
+      } finally {
+        submittingConfig.value = false
+      }
+    }
+  })
+}
+
+const handleDeleteConfig = (row) => {
+  ElMessageBox.confirm(`确定要删除配置 "${row.configurationName}" 吗？`, '删除确认', {
+    confirmButtonText: '删除',
+    cancelButtonText: '取消',
+    type: 'warning',
+  }).then(async () => {
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/llm-configuration/users/${userId.value}/${row.configurationName}`,
+        { method: 'DELETE' },
+      )
+      const res = await response.json()
+      if (res.code === 0) {
+        ElMessage.success('删除成功')
+        fetchConfigs()
+      } else {
+        ElMessage.error(res.message || '删除失败')
+      }
+    } catch (error) {
+      ElMessage.error('网络请求错误')
+    }
+  })
+}
+
+// ---------- 聊天相关状态 ----------
 const activeSessionId = ref(null)
 const inputContent = ref('')
 const isSending = ref(false)
 const messageContainerRef = ref(null)
-
 const chatList = ref([])
 
-// 模拟历史对话（实际项目中可替换为接口获取）
 const history = ref([
   {
     id: 1,
@@ -198,34 +454,15 @@ const history = ref([
         role: 'ai',
         content: '薛定谔方程是量子力学的核心方程，描述了物理系统的量子态随时间演化的规律。',
       },
-      { role: 'user', content: '它在化学中有什么应用？' },
-      { role: 'ai', content: '在计算化学中，它用于计算分子的电子结构、能量和化学键特性。' },
-    ],
-  },
-  {
-    id: 3,
-    title: '实验报告生成助手',
-    messages: [
-      { role: 'user', content: '帮我写一份酸碱滴定实验报告的模板。' },
-      {
-        role: 'ai',
-        content:
-          '好的，实验报告通常包含：实验目的、实验原理、仪器与试剂、实验步骤、数据处理、结果与讨论。你需要我详细展开哪一部分？',
-      },
     ],
   },
 ])
 
-// ---------- 生命周期 ----------
 onMounted(() => {
   loadUserInfo()
 })
 
-// ---------- 功能函数 ----------
-const switchView = (viewName) => {
-  currentView.value = viewName
-}
-
+// ---------- 聊天功能函数 ----------
 const startNewChat = () => {
   currentView.value = 'chat'
   activeSessionId.value = null
@@ -254,7 +491,6 @@ const sendMessage = () => {
   const text = inputContent.value.trim()
   if (!text || isSending.value) return
 
-  // 如果是新会话，创建历史记录
   if (!activeSessionId.value) {
     const newId = Date.now()
     const newSession = {
@@ -275,7 +511,6 @@ const sendMessage = () => {
   chatList.value.push({ role: 'ai', content: '', loading: true })
   scrollToBottom()
 
-  // 模拟 AI 回复
   setTimeout(() => {
     chatList.value.pop()
     chatList.value.push({
@@ -287,14 +522,12 @@ const sendMessage = () => {
   }, 1000)
 }
 
-// 下拉菜单命令处理
 const handleUserCommand = (command) => {
   if (command === 'logout') {
     logout()
   }
 }
 
-// 退出登录
 const logout = () => {
   ElMessageBox.confirm('确定要退出登录吗？', '提示', {
     type: 'warning',
@@ -302,7 +535,6 @@ const logout = () => {
     cancelButtonText: '取消',
   })
     .then(() => {
-      // 清除所有登录信息
       localStorage.removeItem('token')
       localStorage.removeItem('userId')
       localStorage.removeItem('username')
@@ -310,13 +542,12 @@ const logout = () => {
       ElMessage.success('已退出登录')
       router.push('/login')
     })
-    .catch(() => {
-      // 取消退出
-    })
+    .catch(() => {})
 }
 </script>
 
 <style scoped>
+/* 全局布局 */
 .layout {
   height: 100vh;
   background: #f8f8f9;
@@ -395,7 +626,7 @@ const logout = () => {
   flex: 1;
 }
 
-/* 用户卡片区域 */
+/* 用户卡片 */
 .user-card {
   display: flex;
   align-items: center;
@@ -425,7 +656,7 @@ const logout = () => {
   color: #333;
 }
 
-/* 主区域样式 */
+/* 主区域 */
 .main-area {
   padding: 0;
   display: flex;
@@ -447,6 +678,73 @@ const logout = () => {
   margin: 20px 0 10px;
   color: #333;
 }
+
+/* ================== 配置管理样式 (优化后) ================== */
+.config-view-wrapper {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start; /* 顶部对齐 */
+  background: #f8f8f9;
+  padding: 40px;
+  overflow-y: auto;
+}
+
+.config-card {
+  width: 100%;
+  max-width: 1000px; /* 限制最大宽度 */
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+  padding: 30px;
+  display: flex;
+  flex-direction: column;
+  height: auto;
+  max-height: 90vh; /* 避免超出屏幕 */
+}
+
+.config-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 25px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.header-left h2 {
+  margin: 0 0 5px 0;
+  font-size: 20px;
+  color: #333;
+}
+.subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: #999;
+}
+.add-btn {
+  background: #7a8cff;
+  border-color: #7a8cff;
+}
+.add-btn:hover {
+  background: #6b7de0;
+  border-color: #6b7de0;
+}
+
+.table-container {
+  flex: 1;
+  overflow: hidden;
+}
+
+.form-tip {
+  font-size: 12px;
+  color: #e6a23c;
+  margin-top: 5px;
+}
+.dialog-footer {
+  text-align: right;
+}
+
+/* 聊天相关 */
 .chat-layout {
   flex: 1;
   display: flex;
