@@ -43,25 +43,23 @@
         </div>
       </div>
 
-      <!-- 用户信息区域：动态显示真实登录用户 -->
-      <div class="user-card" @click="showUserMenu = true">
+      <!-- 用户信息区域 + 退出登录下拉菜单（已修复） -->
+      <div class="user-card">
         <div class="u-info">
           <div class="name">{{ username }}</div>
           <div class="email">{{ email || '未设置邮箱' }}</div>
         </div>
-        <el-icon><MoreFilled /></el-icon>
-      </div>
 
-      <!-- 退出登录下拉菜单 -->
-      <el-dropdown trigger="click" @visible-change="(v) => (showUserMenu = v)" v-if="showUserMenu">
-        <span></span>
-        <!-- 占位，实际不显示 -->
-        <template #dropdown>
-          <el-dropdown-menu>
-            <el-dropdown-item @click="logout">退出登录</el-dropdown-item>
-          </el-dropdown-menu>
-        </template>
-      </el-dropdown>
+        <!-- 点击这个“更多”图标弹出退出登录 -->
+        <el-dropdown trigger="click" @command="handleUserCommand">
+          <el-icon class="more-icon"><MoreFilled /></el-icon>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="logout">退出登录</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+      </div>
     </el-aside>
 
     <el-main class="main-area">
@@ -136,7 +134,7 @@
 </template>
 
 <script setup>
-import { ref, nextTick, onMounted, computed } from 'vue'
+import { ref, nextTick, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   ChatRound,
@@ -151,7 +149,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 
 const router = useRouter()
 
-// ---------- 用户信息（真实登录后获取） ----------
+// ---------- 用户信息 ----------
 const username = ref('加载中...')
 const email = ref('')
 
@@ -163,7 +161,6 @@ const loadUserInfo = () => {
     username.value = storedUsername
     email.value = storedEmail || '未设置邮箱'
   } else {
-    // 未登录，跳转登录页
     ElMessage.warning('请先登录')
     router.push('/login')
   }
@@ -175,11 +172,10 @@ const activeSessionId = ref(null)
 const inputContent = ref('')
 const isSending = ref(false)
 const messageContainerRef = ref(null)
-const showUserMenu = ref(false)
 
 const chatList = ref([])
 
-// 模拟历史数据（保留用于演示）
+// 模拟历史对话（实际项目中可替换为接口获取）
 const history = ref([
   {
     id: 1,
@@ -225,7 +221,7 @@ onMounted(() => {
   loadUserInfo()
 })
 
-// ---------- 功能逻辑 ----------
+// ---------- 功能函数 ----------
 const switchView = (viewName) => {
   currentView.value = viewName
 }
@@ -258,6 +254,7 @@ const sendMessage = () => {
   const text = inputContent.value.trim()
   if (!text || isSending.value) return
 
+  // 如果是新会话，创建历史记录
   if (!activeSessionId.value) {
     const newId = Date.now()
     const newSession = {
@@ -278,6 +275,7 @@ const sendMessage = () => {
   chatList.value.push({ role: 'ai', content: '', loading: true })
   scrollToBottom()
 
+  // 模拟 AI 回复
   setTimeout(() => {
     chatList.value.pop()
     chatList.value.push({
@@ -289,23 +287,36 @@ const sendMessage = () => {
   }, 1000)
 }
 
+// 下拉菜单命令处理
+const handleUserCommand = (command) => {
+  if (command === 'logout') {
+    logout()
+  }
+}
+
 // 退出登录
 const logout = () => {
   ElMessageBox.confirm('确定要退出登录吗？', '提示', {
     type: 'warning',
+    confirmButtonText: '确定',
+    cancelButtonText: '取消',
   })
     .then(() => {
-      localStorage.clear()
+      // 清除所有登录信息
+      localStorage.removeItem('token')
+      localStorage.removeItem('userId')
+      localStorage.removeItem('username')
+      localStorage.removeItem('email')
       ElMessage.success('已退出登录')
       router.push('/login')
     })
-    .catch(() => {})
+    .catch(() => {
+      // 取消退出
+    })
 }
 </script>
 
-<!-- 样式部分完全不变 -->
 <style scoped>
-/* 所有样式和之前完全一致，省略以节省篇幅 */
 .layout {
   height: 100vh;
   background: #f8f8f9;
@@ -381,25 +392,40 @@ const logout = () => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex: 1;
 }
+
+/* 用户卡片区域 */
 .user-card {
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: space-between;
   border-top: 1px solid #eee;
   padding-top: 15px;
-  cursor: pointer;
+  margin-top: auto;
 }
 .u-info {
   flex: 1;
 }
 .name {
   font-weight: 600;
+  font-size: 15px;
 }
 .email {
   font-size: 12px;
   color: #666;
 }
+.more-icon {
+  font-size: 20px;
+  color: #888;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+.more-icon:hover {
+  color: #333;
+}
+
+/* 主区域样式 */
 .main-area {
   padding: 0;
   display: flex;
@@ -453,7 +479,6 @@ const logout = () => {
 .welcome-q {
   font-size: 22px;
   font-weight: 600;
-  margin-bottom: 40px;
 }
 .chat-list {
   display: flex;
@@ -519,6 +544,7 @@ const logout = () => {
   box-shadow: none;
   resize: none;
   padding: 0;
+  font-size: 15px;
 }
 .input-footer {
   margin-top: 10px;
@@ -536,7 +562,6 @@ const logout = () => {
 .send-btn {
   background: #7a8cff;
   border: none;
-  transition: background 0.2s;
 }
 .send-btn:hover {
   background: #6b7de0;
