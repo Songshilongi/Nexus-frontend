@@ -29,7 +29,7 @@
       </div>
 
       <!-- ==================== 新增：当前模型配置快速切换 ==================== -->
-      <div class="section-title" style="margin-top: 25px">当前模型配置</div>
+      <div class="section-title" style="margin-top: 25px">选择对话模型</div>
       <div class="config-switcher">
         <el-select
           v-model="activeConfigName"
@@ -45,9 +45,9 @@
         </el-select>
 
         <div class="active-config-tip" v-if="activeConfigName">
-          已激活：<span class="highlight">{{ activeConfigName }}</span>
+          当前激活：<span class="highlight">{{ activeConfigName }}</span>
         </div>
-        <div class="active-config-tip no-config" v-else>未选择配置（使用默认模型）</div>
+        <div class="active-config-tip no-config" v-else>未选择配置</div>
       </div>
 
       <!-- ==================== 历史对话 ==================== -->
