@@ -28,6 +28,29 @@
         <span>任务创建</span>
       </div>
 
+      <!-- ==================== 新增：当前模型配置快速切换 ==================== -->
+      <div class="section-title" style="margin-top: 25px">当前模型配置</div>
+      <div class="config-switcher">
+        <el-select
+          v-model="activeConfigName"
+          placeholder="请选择要使用的配置"
+          clearable
+          filterable
+          :loading="configSelectLoading"
+          size="default"
+          class="config-select"
+          @change="handleConfigChange"
+        >
+          <el-option v-for="item in availableConfigs" :key="item" :label="item" :value="item" />
+        </el-select>
+
+        <div class="active-config-tip" v-if="activeConfigName">
+          已激活：<span class="highlight">{{ activeConfigName }}</span>
+        </div>
+        <div class="active-config-tip no-config" v-else>未选择配置（使用默认模型）</div>
+      </div>
+
+      <!-- ==================== 历史对话 ==================== -->
       <div class="section-title" style="margin-top: 25px">历史对话</div>
 
       <div class="history-list">
@@ -61,7 +84,7 @@
     </el-aside>
 
     <el-main class="main-area">
-      <!-- ==================== 配置管理（已支持分页） ==================== -->
+      <!-- ==================== 配置管理 ==================== -->
       <div v-if="currentView === 'keys'" class="config-view-wrapper">
         <div class="config-card">
           <div class="config-header">
@@ -114,7 +137,6 @@
             </el-table>
           </div>
 
-          <!-- 分页控件 -->
           <div class="pagination-wrapper">
             <el-pagination
               v-model:current-page="pagination.pageNumber"
@@ -268,7 +290,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, nextTick, onMounted } from 'vue'
+import { ref, reactive, nextTick, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   ChatRound,
@@ -314,7 +336,47 @@ const switchView = (viewName) => {
   }
 }
 
-// ==================== 配置管理（分页） ====================
+// ==================== 新增：模型配置快速切换 ====================
+const availableConfigs = ref([]) // 所有配置名
+const activeConfigName = ref('') // 当前激活的配置名
+const configSelectLoading = ref(false)
+
+const fetchAvailableConfigs = async () => {
+  if (!userId.value) return
+  configSelectLoading.value = true
+  try {
+    const url = `${API_BASE_URL}/llm-configuration/users/${userId.value}/configurations`
+    const resp = await fetch(url)
+    const res = await resp.json()
+    if (res.code === 200 && Array.isArray(res.data)) {
+      availableConfigs.value = res.data
+      // 恢复上次选择的配置（如果还存在）
+      const saved = localStorage.getItem('activeConfigName')
+      if (saved && availableConfigs.value.includes(saved)) {
+        activeConfigName.value = saved
+      }
+    } else {
+      ElMessage.error(res.message || '获取配置列表失败')
+    }
+  } catch (e) {
+    console.error(e)
+    ElMessage.error('请求配置列表出错')
+  } finally {
+    configSelectLoading.value = false
+  }
+}
+
+const handleConfigChange = (val) => {
+  if (val) {
+    localStorage.setItem('activeConfigName', val)
+    ElMessage.success(`已切换到配置：${val}`)
+  } else {
+    localStorage.removeItem('activeConfigName')
+    ElMessage.info('已清除配置选择，使用默认模型')
+  }
+}
+
+// ==================== 配置管理（分页）===================
 const configList = ref([])
 const loadingConfigs = ref(false)
 
@@ -322,7 +384,6 @@ const pagination = reactive({
   pageNumber: 1,
   pageSize: 5,
   total: 0,
-  pages: 0,
 })
 
 const configDialogVisible = ref(false)
@@ -343,16 +404,12 @@ const configRules = {
     { required: true, message: '请输入配置名称', trigger: 'blur' },
     { min: 2, max: 30, message: '长度在 2 到 30 个字符', trigger: 'blur' },
   ],
-  llmModelId: [
-    { required: true, message: '请输入模型ID', trigger: 'blur' },
-    { max: 50, message: '长度不可超过 50 个字符', trigger: 'blur' },
-  ],
+  llmModelId: [{ required: true, message: '请输入模型ID', trigger: 'blur' }],
   baseUrl: [{ required: true, message: '请输入Base URL', trigger: 'blur' }],
   apiKey: [{ required: true, message: '请输入API Key', trigger: 'blur' }],
   temperature: [{ required: true, message: '请选择温度', trigger: 'change' }],
 }
 
-// 分页查询配置列表
 const fetchConfigs = async () => {
   if (!userId.value) return
   loadingConfigs.value = true
@@ -363,7 +420,6 @@ const fetchConfigs = async () => {
     if (res.code === 200) {
       configList.value = res.data.result || []
       pagination.total = res.data.total || 0
-      pagination.pages = res.data.pages || 0
       pagination.pageNumber = res.data.pageNumber
       pagination.pageSize = res.data.pageSize
     } else {
@@ -391,13 +447,7 @@ const openCreateConfig = () => {
 
 const openEditConfig = (row) => {
   isEditMode.value = true
-  Object.assign(configForm, {
-    configurationName: row.configurationName,
-    apiKey: row.apiKey,
-    baseUrl: row.baseUrl,
-    llmModelId: row.llmModelId,
-    temperature: row.temperature,
-  })
+  Object.assign(configForm, { ...row })
   configDialogVisible.value = true
 }
 
@@ -418,6 +468,7 @@ const submitConfig = async () => {
           ElMessage.success(isEditMode.value ? '更新成功' : '创建成功')
           configDialogVisible.value = false
           fetchConfigs()
+          fetchAvailableConfigs() // 新增/编辑后刷新快速切换列表
         } else {
           ElMessage.error(res.message || '操作失败')
         }
@@ -432,8 +483,6 @@ const submitConfig = async () => {
 
 const handleDeleteConfig = (row) => {
   ElMessageBox.confirm(`确定要删除配置 "${row.configurationName}" 吗？`, '删除确认', {
-    confirmButtonText: '删除',
-    cancelButtonText: '取消',
     type: 'warning',
   }).then(async () => {
     try {
@@ -444,11 +493,15 @@ const handleDeleteConfig = (row) => {
       const res = await response.json()
       if (res.code === 200) {
         ElMessage.success('删除成功')
-        // 删除后当前页为空且不是第一页时，自动回退
         if (configList.value.length === 1 && pagination.pageNumber > 1) {
           pagination.pageNumber -= 1
         }
         fetchConfigs()
+        fetchAvailableConfigs() // 删除后刷新快速切换列表
+        if (activeConfigName.value === row.configurationName) {
+          activeConfigName.value = ''
+          localStorage.removeItem('activeConfigName')
+        }
       } else {
         ElMessage.error(res.message || '删除失败')
       }
@@ -458,7 +511,7 @@ const handleDeleteConfig = (row) => {
   })
 }
 
-// ---------- 聊天相关状态 ----------
+// ---------- 聊天相关 ----------
 const activeSessionId = ref(null)
 const inputContent = ref('')
 const isSending = ref(false)
@@ -471,11 +524,7 @@ const history = ref([
     title: '如何合成聚乙烯',
     messages: [
       { role: 'user', content: '请问如何合成聚乙烯？' },
-      {
-        role: 'ai',
-        content:
-          '聚乙烯（PE）通常通过乙烯的聚合反应合成。主要方法包括高压法（自由基聚合）和低压法（配位聚合，使用齐格勒-纳塔催化剂）。',
-      },
+      { role: 'ai', content: '聚乙烯（PE）通常通过乙烯的聚合反应合成...' },
     ],
   },
   {
@@ -483,10 +532,7 @@ const history = ref([
     title: '量子化学基础',
     messages: [
       { role: 'user', content: '解释一下薛定谔方程。' },
-      {
-        role: 'ai',
-        content: '薛定谔方程是量子力学的核心方程，描述了物理系统的量子态随时间演化的规律。',
-      },
+      { role: 'ai', content: '薛定谔方程是量子力学的核心方程...' },
     ],
   },
 ])
@@ -495,7 +541,17 @@ onMounted(() => {
   loadUserInfo()
 })
 
-// ---------- 聊天功能函数 ----------
+// 监听 userId 变化后加载配置列表
+watch(
+  userId,
+  (id) => {
+    if (id) {
+      fetchAvailableConfigs()
+    }
+  },
+  { immediate: true },
+)
+
 const startNewChat = () => {
   currentView.value = 'chat'
   activeSessionId.value = null
@@ -548,7 +604,7 @@ const sendMessage = () => {
     chatList.value.pop()
     chatList.value.push({
       role: 'ai',
-      content: `[模拟回复] 针对 "${text}" 的分析结果。\n当前会话ID: ${activeSessionId.value}\n这条记录已自动保存到左侧历史列表中。`,
+      content: `[模拟回复] 针对 "${text}" 的分析结果。\n当前使用的配置：${activeConfigName.value || '默认模型'}`,
     })
     isSending.value = false
     scrollToBottom()
@@ -556,22 +612,13 @@ const sendMessage = () => {
 }
 
 const handleUserCommand = (command) => {
-  if (command === 'logout') {
-    logout()
-  }
+  if (command === 'logout') logout()
 }
 
 const logout = () => {
-  ElMessageBox.confirm('确定要退出登录吗？', '提示', {
-    type: 'warning',
-    confirmButtonText: '确定',
-    cancelButtonText: '取消',
-  })
+  ElMessageBox.confirm('确定要退出登录吗？', '提示', { type: 'warning' })
     .then(() => {
-      localStorage.removeItem('token')
-      localStorage.removeItem('userId')
-      localStorage.removeItem('username')
-      localStorage.removeItem('email')
+      localStorage.clear()
       ElMessage.success('已退出登录')
       router.push('/login')
     })
@@ -580,7 +627,32 @@ const logout = () => {
 </script>
 
 <style scoped>
-/* 全局布局 */
+/* ==================== 新增样式 ==================== */
+.config-switcher {
+  background: #fafafa;
+  border: 1px solid #e8e8e8;
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 15px;
+}
+.config-select {
+  width: 100%;
+}
+.active-config-tip {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #666;
+  text-align: center;
+}
+.active-config-tip .highlight {
+  color: #7a8cff;
+  font-weight: 600;
+}
+.active-config-tip.no-config {
+  color: #999;
+}
+
+/* ==================== 原有样式（全部保留） ==================== */
 .layout {
   height: 100vh;
   background: #f8f8f9;
@@ -658,8 +730,6 @@ const logout = () => {
   text-overflow: ellipsis;
   flex: 1;
 }
-
-/* 用户卡片 */
 .user-card {
   display: flex;
   align-items: center;
@@ -688,8 +758,6 @@ const logout = () => {
 .more-icon:hover {
   color: #333;
 }
-
-/* 主区域 */
 .main-area {
   padding: 0;
   display: flex;
@@ -711,8 +779,6 @@ const logout = () => {
   margin: 20px 0 10px;
   color: #333;
 }
-
-/* 配置管理样式 */
 .config-view-wrapper {
   flex: 1;
   display: flex;
@@ -722,7 +788,6 @@ const logout = () => {
   padding: 40px;
   overflow-y: auto;
 }
-
 .config-card {
   width: 100%;
   max-width: 1000px;
@@ -732,10 +797,8 @@ const logout = () => {
   padding: 30px;
   display: flex;
   flex-direction: column;
-  height: auto;
   max-height: 90vh;
 }
-
 .config-header {
   display: flex;
   justify-content: space-between;
@@ -762,19 +825,16 @@ const logout = () => {
   background: #6b7de0;
   border-color: #6b7de0;
 }
-
 .table-container {
   flex: 1;
   overflow: hidden;
 }
-
 .pagination-wrapper {
   margin-top: 20px;
   display: flex;
   justify-content: flex-end;
   padding: 10px 0;
 }
-
 .form-tip {
   font-size: 12px;
   color: #e6a23c;
@@ -783,8 +843,6 @@ const logout = () => {
 .dialog-footer {
   text-align: right;
 }
-
-/* 聊天相关 */
 .chat-layout {
   flex: 1;
   display: flex;
