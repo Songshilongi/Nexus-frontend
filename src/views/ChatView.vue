@@ -604,7 +604,7 @@ const sendMessage = () => {
     chatList.value.pop()
     chatList.value.push({
       role: 'ai',
-      content: `[模拟回复] 针对 "${text}" 的分析结果。\n当前使用的配置：${activeConfigName.value || '默认模型'}`,
+      content: `[模拟回复] 针对 "${text}" 的分析结果。\n当前使用的配置：${activeConfigName.value || '没有模型'}`,
     })
     isSending.value = false
     scrollToBottom()
