@@ -337,7 +337,7 @@ const fetchConfigs = async () => {
   try {
     const response = await fetch(`${API_BASE_URL}/llm-configuration/users/${userId.value}`)
     const res = await response.json()
-    if (res.code === 0) {
+    if (res.code === 200) {
       configList.value = res.data || []
     } else {
       ElMessage.error(res.message || '获取配置列表失败')
@@ -385,7 +385,7 @@ const submitConfig = async () => {
         })
         const res = await response.json()
 
-        if (res.code === 0) {
+        if (res.code === 200) {
           ElMessage.success(isEditMode.value ? '更新成功' : '创建成功')
           configDialogVisible.value = false
           fetchConfigs()
@@ -413,7 +413,7 @@ const handleDeleteConfig = (row) => {
         { method: 'DELETE' },
       )
       const res = await response.json()
-      if (res.code === 0) {
+      if (res.code === 200) {
         ElMessage.success('删除成功')
         fetchConfigs()
       } else {
