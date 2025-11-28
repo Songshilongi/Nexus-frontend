@@ -61,6 +61,7 @@
     </el-aside>
 
     <el-main class="main-area">
+      <!-- ==================== 配置管理（已支持分页） ==================== -->
       <div v-if="currentView === 'keys'" class="config-view-wrapper">
         <div class="config-card">
           <div class="config-header">
@@ -112,8 +113,22 @@
               </el-table-column>
             </el-table>
           </div>
+
+          <!-- 分页控件 -->
+          <div class="pagination-wrapper">
+            <el-pagination
+              v-model:current-page="pagination.pageNumber"
+              v-model:page-size="pagination.pageSize"
+              :page-sizes="[5, 10]"
+              :total="pagination.total"
+              layout="total, sizes, prev, pager, next, jumper"
+              @size-change="fetchConfigs"
+              @current-change="fetchConfigs"
+            />
+          </div>
         </div>
 
+        <!-- 新增/编辑对话框 -->
         <el-dialog
           v-model="configDialogVisible"
           :title="isEditMode ? '编辑配置' : '新增配置'"
@@ -181,6 +196,7 @@
         </el-dialog>
       </div>
 
+      <!-- 任务占位页面 -->
       <div v-else-if="currentView === 'tasks'" class="placeholder-view">
         <div class="placeholder-content">
           <el-icon size="60" color="#ddd"><DocumentAdd /></el-icon>
@@ -189,6 +205,7 @@
         </div>
       </div>
 
+      <!-- 聊天界面 -->
       <div v-else class="chat-layout">
         <div class="message-container" ref="messageContainerRef">
           <div v-if="chatList.length === 0" class="welcome-wrapper">
@@ -282,10 +299,6 @@ const loadUserInfo = () => {
     username.value = storedUsername
     email.value = storedEmail || '未设置邮箱'
     userId.value = storedUserId || 123456
-
-    if (currentView.value === 'keys') {
-      fetchConfigs()
-    }
   } else {
     ElMessage.warning('请先登录')
     router.push('/login')
@@ -301,9 +314,17 @@ const switchView = (viewName) => {
   }
 }
 
-// ---------- 配置管理逻辑 ----------
+// ==================== 配置管理（分页） ====================
 const configList = ref([])
 const loadingConfigs = ref(false)
+
+const pagination = reactive({
+  pageNumber: 1,
+  pageSize: 5,
+  total: 0,
+  pages: 0,
+})
+
 const configDialogVisible = ref(false)
 const isEditMode = ref(false)
 const submittingConfig = ref(false)
@@ -331,18 +352,25 @@ const configRules = {
   temperature: [{ required: true, message: '请选择温度', trigger: 'change' }],
 }
 
+// 分页查询配置列表
 const fetchConfigs = async () => {
   if (!userId.value) return
   loadingConfigs.value = true
   try {
-    const response = await fetch(`${API_BASE_URL}/llm-configuration/users/${userId.value}`)
+    const url = `${API_BASE_URL}/llm-configuration/users/${userId.value}?pageNumber=${pagination.pageNumber}&pageSize=${pagination.pageSize}`
+    const response = await fetch(url)
     const res = await response.json()
     if (res.code === 200) {
-      configList.value = res.data || []
+      configList.value = res.data.result || []
+      pagination.total = res.data.total || 0
+      pagination.pages = res.data.pages || 0
+      pagination.pageNumber = res.data.pageNumber
+      pagination.pageSize = res.data.pageSize
     } else {
       ElMessage.error(res.message || '获取配置列表失败')
     }
   } catch (error) {
+    console.error(error)
     ElMessage.error('网络请求失败')
   } finally {
     loadingConfigs.value = false
@@ -351,21 +379,25 @@ const fetchConfigs = async () => {
 
 const openCreateConfig = () => {
   isEditMode.value = false
-  configForm.configurationName = ''
-  configForm.apiKey = ''
-  configForm.baseUrl = ''
-  configForm.llmModelId = ''
-  configForm.temperature = 0.7
+  Object.assign(configForm, {
+    configurationName: '',
+    apiKey: '',
+    baseUrl: '',
+    llmModelId: '',
+    temperature: 0.7,
+  })
   configDialogVisible.value = true
 }
 
 const openEditConfig = (row) => {
   isEditMode.value = true
-  configForm.configurationName = row.configurationName
-  configForm.apiKey = row.apiKey
-  configForm.baseUrl = row.baseUrl
-  configForm.llmModelId = row.llmModelId
-  configForm.temperature = row.temperature
+  Object.assign(configForm, {
+    configurationName: row.configurationName,
+    apiKey: row.apiKey,
+    baseUrl: row.baseUrl,
+    llmModelId: row.llmModelId,
+    temperature: row.temperature,
+  })
   configDialogVisible.value = true
 }
 
@@ -377,14 +409,11 @@ const submitConfig = async () => {
       try {
         const method = isEditMode.value ? 'PUT' : 'POST'
         const response = await fetch(`${API_BASE_URL}/llm-configuration/users/${userId.value}`, {
-          method: method,
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          method,
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(configForm),
         })
         const res = await response.json()
-
         if (res.code === 200) {
           ElMessage.success(isEditMode.value ? '更新成功' : '创建成功')
           configDialogVisible.value = false
@@ -415,6 +444,10 @@ const handleDeleteConfig = (row) => {
       const res = await response.json()
       if (res.code === 200) {
         ElMessage.success('删除成功')
+        // 删除后当前页为空且不是第一页时，自动回退
+        if (configList.value.length === 1 && pagination.pageNumber > 1) {
+          pagination.pageNumber -= 1
+        }
         fetchConfigs()
       } else {
         ElMessage.error(res.message || '删除失败')
@@ -679,12 +712,12 @@ const logout = () => {
   color: #333;
 }
 
-/* ================== 配置管理样式 (优化后) ================== */
+/* 配置管理样式 */
 .config-view-wrapper {
   flex: 1;
   display: flex;
   justify-content: center;
-  align-items: flex-start; /* 顶部对齐 */
+  align-items: flex-start;
   background: #f8f8f9;
   padding: 40px;
   overflow-y: auto;
@@ -692,7 +725,7 @@ const logout = () => {
 
 .config-card {
   width: 100%;
-  max-width: 1000px; /* 限制最大宽度 */
+  max-width: 1000px;
   background: #fff;
   border-radius: 16px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
@@ -700,7 +733,7 @@ const logout = () => {
   display: flex;
   flex-direction: column;
   height: auto;
-  max-height: 90vh; /* 避免超出屏幕 */
+  max-height: 90vh;
 }
 
 .config-header {
@@ -733,6 +766,13 @@ const logout = () => {
 .table-container {
   flex: 1;
   overflow: hidden;
+}
+
+.pagination-wrapper {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
+  padding: 10px 0;
 }
 
 .form-tip {
