@@ -293,7 +293,7 @@ async function login() {
   if (res.data.code === 200) {
     const { token, userId, username, email } = res.data.data
     localStorage.setItem('token', token)
-    localStorage.setItem('userId', userId)
+    localStorage.setItem('userId', String(userId))
     localStorage.setItem('username', username)
     localStorage.setItem('email', email || '')
 

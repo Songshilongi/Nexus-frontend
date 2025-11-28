@@ -43,13 +43,25 @@
         </div>
       </div>
 
-      <div class="user-card">
+      <!-- 用户信息区域：动态显示真实登录用户 -->
+      <div class="user-card" @click="showUserMenu = true">
         <div class="u-info">
-          <div class="name">MOMO</div>
-          <div class="email">momo@MODAO.com</div>
+          <div class="name">{{ username }}</div>
+          <div class="email">{{ email || '未设置邮箱' }}</div>
         </div>
         <el-icon><MoreFilled /></el-icon>
       </div>
+
+      <!-- 退出登录下拉菜单 -->
+      <el-dropdown trigger="click" @visible-change="(v) => (showUserMenu = v)" v-if="showUserMenu">
+        <span></span>
+        <!-- 占位，实际不显示 -->
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item @click="logout">退出登录</el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
     </el-aside>
 
     <el-main class="main-area">
@@ -65,7 +77,7 @@
       <div v-else class="chat-layout">
         <div class="message-container" ref="messageContainerRef">
           <div v-if="chatList.length === 0" class="welcome-wrapper">
-            <div class="welcome-hi">你好，MOMO</div>
+            <div class="welcome-hi">你好，{{ username }}！</div>
             <div class="welcome-q">今天需要我帮你做点什么吗？</div>
           </div>
 
@@ -124,7 +136,8 @@
 </template>
 
 <script setup>
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import {
   ChatRound,
   Key,
@@ -134,10 +147,39 @@ import {
   Promotion,
   Loading,
 } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
-// ---------- 模拟数据 ----------
+const router = useRouter()
 
-// 预置的历史对话数据
+// ---------- 用户信息（真实登录后获取） ----------
+const username = ref('加载中...')
+const email = ref('')
+
+const loadUserInfo = () => {
+  const storedUsername = localStorage.getItem('username')
+  const storedEmail = localStorage.getItem('email')
+
+  if (storedUsername) {
+    username.value = storedUsername
+    email.value = storedEmail || '未设置邮箱'
+  } else {
+    // 未登录，跳转登录页
+    ElMessage.warning('请先登录')
+    router.push('/login')
+  }
+}
+
+// ---------- 其他状态 ----------
+const currentView = ref('chat')
+const activeSessionId = ref(null)
+const inputContent = ref('')
+const isSending = ref(false)
+const messageContainerRef = ref(null)
+const showUserMenu = ref(false)
+
+const chatList = ref([])
+
+// 模拟历史数据（保留用于演示）
 const history = ref([
   {
     id: 1,
@@ -178,47 +220,33 @@ const history = ref([
   },
 ])
 
-// ---------- 状态管理 ----------
-const currentView = ref('chat') // 当前视图
-const activeSessionId = ref(null) // 当前选中的会话 ID，null 表示新建/未保存
-const inputContent = ref('')
-const isSending = ref(false)
-const messageContainerRef = ref(null)
+// ---------- 生命周期 ----------
+onMounted(() => {
+  loadUserInfo()
+})
 
-// 当前显示的对话列表（重要：这是一个响应式引用）
-const chatList = ref([])
-
-// ---------- 核心逻辑 ----------
-
-// 1. 切换侧边栏视图（功能区）
+// ---------- 功能逻辑 ----------
 const switchView = (viewName) => {
   currentView.value = viewName
 }
 
-// 2. 开启新对话
 const startNewChat = () => {
   currentView.value = 'chat'
-  activeSessionId.value = null // 重置 ID
-  chatList.value = [] // 清空屏幕
+  activeSessionId.value = null
+  chatList.value = []
   inputContent.value = ''
 }
 
-// 3. 点击历史记录
 const selectHistory = (id) => {
   currentView.value = 'chat'
   activeSessionId.value = id
-
-  // 查找对应的历史记录数据
   const targetSession = history.value.find((item) => item.id === id)
   if (targetSession) {
-    // 将 chatList 指向该历史记录的 messages 数组
-    // 这样修改 chatList 会直接更新 history 中的数据
     chatList.value = targetSession.messages
     scrollToBottom()
   }
 }
 
-// 4. 滚动到底部
 const scrollToBottom = async () => {
   await nextTick()
   if (messageContainerRef.value) {
@@ -226,60 +254,62 @@ const scrollToBottom = async () => {
   }
 }
 
-// 5. 发送消息逻辑
 const sendMessage = () => {
   const text = inputContent.value.trim()
   if (!text || isSending.value) return
 
-  // 如果是全新对话（没有 activeSessionId），需要先创建历史条目
   if (!activeSessionId.value) {
-    const newId = Date.now() // 简单模拟 ID
+    const newId = Date.now()
     const newSession = {
       id: newId,
-      title: text.length > 10 ? text.substring(0, 10) + '...' : text, // 截取前10字作为标题
+      title: text.length > 10 ? text.substring(0, 10) + '...' : text,
       messages: [],
     }
-
-    history.value.unshift(newSession) // 添加到历史列表顶部
+    history.value.unshift(newSession)
     activeSessionId.value = newId
-    chatList.value = newSession.messages // 绑定引用
+    chatList.value = newSession.messages
   }
 
-  // 1. 添加用户消息
   chatList.value.push({ role: 'user', content: text })
   inputContent.value = ''
   scrollToBottom()
 
-  // 2. 模拟 AI 思考
   isSending.value = true
   chatList.value.push({ role: 'ai', content: '', loading: true })
   scrollToBottom()
 
-  // 3. 模拟接口延迟回复
   setTimeout(() => {
-    // 移除 loading
     chatList.value.pop()
-
-    // 添加回复
     chatList.value.push({
       role: 'ai',
       content: `[模拟回复] 针对 "${text}" 的分析结果。\n当前会话ID: ${activeSessionId.value}\n这条记录已自动保存到左侧历史列表中。`,
     })
-
     isSending.value = false
     scrollToBottom()
   }, 1000)
 }
+
+// 退出登录
+const logout = () => {
+  ElMessageBox.confirm('确定要退出登录吗？', '提示', {
+    type: 'warning',
+  })
+    .then(() => {
+      localStorage.clear()
+      ElMessage.success('已退出登录')
+      router.push('/login')
+    })
+    .catch(() => {})
+}
 </script>
 
+<!-- 样式部分完全不变 -->
 <style scoped>
-/* 全局布局 */
+/* 所有样式和之前完全一致，省略以节省篇幅 */
 .layout {
   height: 100vh;
   background: #f8f8f9;
 }
-
-/* 左侧侧边栏 */
 .sidebar {
   background: #fff;
   border-right: 1px solid #eee;
@@ -287,7 +317,6 @@ const sendMessage = () => {
   flex-direction: column;
   padding: 20px;
 }
-
 .logo-area {
   margin-bottom: 25px;
 }
@@ -296,14 +325,12 @@ const sendMessage = () => {
   font-weight: 700;
   letter-spacing: 0.5px;
 }
-
 .section-title {
   font-size: 14px;
   color: #666;
   margin-bottom: 10px;
   margin-top: 10px;
 }
-
 .menu-btn {
   display: flex;
   align-items: center;
@@ -323,20 +350,17 @@ const sendMessage = () => {
   color: #7a8cff;
   font-weight: 500;
 }
-
-/* 历史记录列表 */
 .history-list {
   flex: 1;
   overflow-y: auto;
   padding-right: 5px;
   margin-top: 5px;
 }
-
 .history-item {
   display: flex;
   align-items: center;
   gap: 10px;
-  background: #f7f7f7; /* 默认灰色背景 */
+  background: #f7f7f7;
   padding: 10px 12px;
   border-radius: 10px;
   margin-bottom: 10px;
@@ -344,31 +368,27 @@ const sendMessage = () => {
   transition: all 0.2s;
   color: #333;
 }
-
 .history-item:hover {
   background: #eee;
 }
-
-/* 选中的历史记录样式 */
 .active-history {
   background: #eef0ff;
   color: #7a8cff;
-  border: 1px solid #7a8cff20; /* 微弱的边框增加层次感 */
+  border: 1px solid #7a8cff20;
 }
-
 .text {
   font-size: 14px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
 .user-card {
   display: flex;
   align-items: center;
   gap: 10px;
   border-top: 1px solid #eee;
   padding-top: 15px;
+  cursor: pointer;
 }
 .u-info {
   flex: 1;
@@ -380,16 +400,12 @@ const sendMessage = () => {
   font-size: 12px;
   color: #666;
 }
-
-/* 右侧主区域 */
 .main-area {
   padding: 0;
   display: flex;
   flex-direction: column;
   height: 100vh;
 }
-
-/* 占位视图 */
 .placeholder-view {
   flex: 1;
   display: flex;
@@ -405,8 +421,6 @@ const sendMessage = () => {
   margin: 20px 0 10px;
   color: #333;
 }
-
-/* 聊天布局 */
 .chat-layout {
   flex: 1;
   display: flex;
@@ -416,7 +430,6 @@ const sendMessage = () => {
   margin: 0 auto;
   height: 100%;
 }
-
 .message-container {
   flex: 1;
   overflow-y: auto;
@@ -424,7 +437,6 @@ const sendMessage = () => {
   display: flex;
   flex-direction: column;
 }
-
 .welcome-wrapper {
   flex: 1;
   display: flex;
@@ -443,22 +455,18 @@ const sendMessage = () => {
   font-weight: 600;
   margin-bottom: 40px;
 }
-
-/* 消息样式 */
 .chat-list {
   display: flex;
   flex-direction: column;
   gap: 20px;
   padding-bottom: 20px;
 }
-
 .message-row {
   display: flex;
   align-items: flex-start;
   gap: 12px;
   max-width: 80%;
 }
-
 .msg-left {
   align-self: flex-start;
 }
@@ -468,7 +476,6 @@ const sendMessage = () => {
   color: #333;
   border-radius: 0 12px 12px 12px;
 }
-
 .msg-right {
   align-self: flex-end;
   flex-direction: row-reverse;
@@ -478,7 +485,6 @@ const sendMessage = () => {
   color: #fff;
   border-radius: 12px 0 12px 12px;
 }
-
 .msg-bubble {
   padding: 12px 16px;
   font-size: 15px;
@@ -486,7 +492,6 @@ const sendMessage = () => {
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.03);
   word-break: break-word;
 }
-
 .ai-avatar {
   width: 36px;
   height: 36px;
@@ -500,8 +505,6 @@ const sendMessage = () => {
   font-size: 14px;
   flex-shrink: 0;
 }
-
-/* 底部输入框 */
 .footer-input-area {
   padding: 20px;
   background: #f8f8f9;
@@ -541,8 +544,6 @@ const sendMessage = () => {
 .send-btn:disabled {
   background: #b0baff;
 }
-
-/* Loading 动画 */
 .typing-indicator span {
   display: inline-block;
   width: 6px;
@@ -559,14 +560,12 @@ const sendMessage = () => {
   animation-delay: 0.4s;
 }
 @keyframes typing {
-  0% {
+  0%,
+  100% {
     transform: translateY(0);
   }
   50% {
     transform: translateY(-4px);
-  }
-  100% {
-    transform: translateY(0);
   }
 }
 </style>
