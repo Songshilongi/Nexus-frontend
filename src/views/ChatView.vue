@@ -1228,13 +1228,37 @@ const logout = () => {
   min-height: 400px;
 }
 .welcome-hi {
-  font-size: 20px;
-  margin-bottom: 10px;
-  color: #555;
+  /* 1. 调整字体大小和粗细 */
+  font-size: 30px; /* 根据图片看字很大，可以根据实际需求调整为 48px - 64px */
+  font-weight: bold;
+
+  /* 2. 核心：实现蓝色渐变文字 */
+  background: linear-gradient(to right, #2c7bf6, #5ca9ff); /* 从深蓝到浅蓝的渐变 */
+  -webkit-background-clip: text; /* 将背景裁剪为文字形状 */
+  background-clip: text;
+  color: transparent; /* 让文字本身的颜色变透明，透出背景的渐变 */
+
+  /* 3. 其他微调 */
+  margin-bottom: 20px;
+  letter-spacing: -1px; /* 大号字体稍微收紧一点间距更好看 */
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 .welcome-q {
-  font-size: 22px;
-  font-weight: 600;
+  font-size: 30px; /* 根据图片看字很大，可以根据实际需求调整为 48px - 64px */
+  font-weight: bold;
+
+  /* 2. 核心：实现蓝色渐变文字 */
+  background: linear-gradient(to right, #2c7bf6, #5ca9ff); /* 从深蓝到浅蓝的渐变 */
+  -webkit-background-clip: text; /* 将背景裁剪为文字形状 */
+  background-clip: text;
+  color: transparent; /* 让文字本身的颜色变透明，透出背景的渐变 */
+
+  /* 3. 其他微调 */
+  margin-bottom: 20px;
+  letter-spacing: -1px; /* 大号字体稍微收紧一点间距更好看 */
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 .chat-list {
   display: flex;
