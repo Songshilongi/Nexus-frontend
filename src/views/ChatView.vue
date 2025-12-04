@@ -568,6 +568,9 @@ onUnmounted(() => {
 })
 
 const handleDeleteHistory = () => {
+  // 1. 【新增】点击后立即隐藏右键菜单
+  contextMenuVisible.value = false
+
   if (!contextMenuTargetId.value) return
 
   ElMessageBox.confirm('确定要删除这条对话记录吗？删除后无法恢复。', '删除警告', {
