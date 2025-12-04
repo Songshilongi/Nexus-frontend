@@ -856,7 +856,13 @@ const logout = () => {
 }
 
 .context-menu-item.delete {
-  /* 可以为删除按钮专门加一些样式 */
+  color: #f56c6c; /* 默认文字颜色设为红色 */
+  font-weight: 500; /* 稍微加粗一点，强调操作 */
+}
+
+.context-menu-item.delete:hover {
+  background: #fef0f0; /* 悬停时背景变为浅红色 */
+  color: #f56c6c; /* 保持文字红色 */
 }
 /* ==================== 结束新增样式 ==================== */
 
