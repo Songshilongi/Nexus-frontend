@@ -62,6 +62,7 @@
           class="history-item"
           :class="{ 'active-history': activeSessionId === item.id }"
           @click="selectHistory(item.id)"
+          @contextmenu.prevent="openContextMenu($event, item)"
         >
           <el-icon><Menu /></el-icon>
           <span class="text" :title="item.title">{{ item.title }}</span>
@@ -284,11 +285,23 @@
         </div>
       </div>
     </el-main>
+
+    <div
+      v-show="contextMenuVisible"
+      class="context-menu"
+      :style="{ top: contextMenuY + 'px', left: contextMenuX + 'px' }"
+      @click.stop
+    >
+      <div class="context-menu-item delete" @click="handleDeleteHistory">
+        <el-icon><Delete /></el-icon>
+        <span>删除会话</span>
+      </div>
+    </div>
   </el-container>
 </template>
 
 <script setup>
-import { ref, reactive, nextTick, onMounted, watch } from 'vue'
+import { ref, reactive, nextTick, onMounted, onUnmounted, watch } from 'vue' // 添加 onUnmounted
 import { useRouter } from 'vue-router'
 import {
   ChatRound,
@@ -299,6 +312,7 @@ import {
   Promotion,
   Loading,
   Plus,
+  Delete, // 新增 Delete 图标
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
@@ -306,10 +320,8 @@ const router = useRouter()
 const API_BASE_URL = 'http://localhost:9002/api/chat-service'
 
 // ---------- 工具函数：解决 Long 类型精度丢失 ----------
-// 使用正则将 JSON 字符串中超过 16 位的数字加上双引号，转换为字符串
 const safeJSONParse = (text) => {
   try {
-    // 匹配 ": " 后面跟随的16位以上数字，并将其包裹在双引号中
     const patchedText = text.replace(/":\s*(\d{16,})/g, '": "$1"')
     return JSON.parse(patchedText)
   } catch (e) {
@@ -388,13 +400,11 @@ const handleConfigChange = (val) => {
 // ==================== 配置管理（分页）===================
 const configList = ref([])
 const loadingConfigs = ref(false)
-
 const pagination = reactive({
   pageNumber: 1,
   pageSize: 5,
   total: 0,
 })
-
 const configDialogVisible = ref(false)
 const isEditMode = ref(false)
 const submittingConfig = ref(false)
@@ -523,15 +533,81 @@ const handleDeleteConfig = (row) => {
 const activeSessionId = ref(null)
 const inputContent = ref('')
 const isSending = ref(false)
-const creatingChat = ref(false) // 新增：控制创建对话的loading
+const creatingChat = ref(false)
 const messageContainerRef = ref(null)
 const chatList = ref([])
 
-// 历史记录列表
 const history = ref([])
 const loadingHistory = ref(false)
-// 对话详情加载状态
 const loadingMessages = ref(false)
+
+// ==================== 修改点：右键菜单逻辑 ====================
+const contextMenuVisible = ref(false)
+const contextMenuX = ref(0)
+const contextMenuY = ref(0)
+const contextMenuTargetId = ref(null)
+
+const openContextMenu = (event, item) => {
+  contextMenuVisible.value = true
+  contextMenuX.value = event.clientX
+  contextMenuY.value = event.clientY
+  contextMenuTargetId.value = item.id // 记录要删除的对话 ID
+}
+
+const closeContextMenu = () => {
+  contextMenuVisible.value = false
+}
+
+// 全局监听点击，关闭右键菜单
+onMounted(() => {
+  window.addEventListener('click', closeContextMenu)
+  loadUserInfo() // 原有的 onMounted 逻辑
+})
+
+onUnmounted(() => {
+  window.removeEventListener('click', closeContextMenu)
+})
+
+const handleDeleteHistory = () => {
+  if (!contextMenuTargetId.value) return
+
+  ElMessageBox.confirm('确定要删除这条对话记录吗？删除后无法恢复。', '删除警告', {
+    confirmButtonText: '删除',
+    cancelButtonText: '取消',
+    type: 'warning',
+  })
+    .then(async () => {
+      try {
+        const url = `${API_BASE_URL}/chat/conversation/${userId.value}/${contextMenuTargetId.value}`
+        const resp = await fetch(url, { method: 'DELETE' })
+        const res = await resp.json()
+
+        if (res.code === 200) {
+          ElMessage.success('删除成功')
+
+          // 1. 从列表中移除
+          history.value = history.value.filter((h) => h.id !== contextMenuTargetId.value)
+
+          // 2. 如果删除的是当前选中的会话，清空当前视图
+          if (activeSessionId.value === contextMenuTargetId.value) {
+            activeSessionId.value = null
+            chatList.value = []
+            // 可选：如果列表不为空，自动选中第一个；或者保持空白
+            // if (history.value.length > 0) selectHistory(history.value[0].id)
+          }
+        } else {
+          ElMessage.error(res.message || '删除失败')
+        }
+      } catch (e) {
+        console.error(e)
+        ElMessage.error('网络请求错误')
+      }
+    })
+    .catch(() => {
+      // 取消删除
+    })
+}
+// ==================== 结束右键菜单逻辑 ====================
 
 const fetchHistory = async () => {
   if (!userId.value) return
@@ -540,14 +616,12 @@ const fetchHistory = async () => {
     const url = `${API_BASE_URL}/chat/conversation/${userId.value}/history`
     const resp = await fetch(url)
     const rawText = await resp.text()
-    // 使用 safeJSONParse 代替 resp.json()
     const res = safeJSONParse(rawText)
 
     if (res && res.code === 200 && res.data && res.data.conversationHistory) {
-      // 映射后端数据：ID现在是字符串，不会丢失精度
       history.value = res.data.conversationHistory.map((item) => {
         return {
-          id: item.conversationId, // 这是一个字符串 "199..."
+          id: item.conversationId,
           title: item.summary,
           messages: [],
           loaded: false,
@@ -565,12 +639,10 @@ const fetchHistory = async () => {
 }
 
 const fetchConversationDetail = async (conversationId) => {
-  // 这里的 conversationId 已经是 String 类型
   const url = `${API_BASE_URL}/chat/conversation/${userId.value}/detail/${conversationId}`
   try {
     const resp = await fetch(url)
     const rawText = await resp.text()
-    // 同样使用 safeJSONParse 防止返回的 JSON 中 ID 精度丢失
     const res = safeJSONParse(rawText)
 
     if (res && res.code === 200 && res.data) {
@@ -586,10 +658,6 @@ const fetchConversationDetail = async (conversationId) => {
   return []
 }
 
-onMounted(() => {
-  loadUserInfo()
-})
-
 watch(
   userId,
   (id) => {
@@ -601,18 +669,15 @@ watch(
   { immediate: true },
 )
 
-// 修改点：辅助函数 - 调用后端创建会话
 const createRemoteConversation = async () => {
   if (!userId.value) return null
   try {
     const url = `${API_BASE_URL}/chat/conversation/${userId.value}/create`
     const resp = await fetch(url, { method: 'POST' })
     const rawText = await resp.text()
-    // 必须使用 safeJSONParse 处理 Long 类型 ID
     const res = safeJSONParse(rawText)
 
     if (res && res.code === 200) {
-      // res.data 就是 conversationId (String类型)
       return res.data
     } else {
       ElMessage.error(res?.message || '创建会话失败')
@@ -625,7 +690,6 @@ const createRemoteConversation = async () => {
   }
 }
 
-// 修改点：点击"新建对话"
 const startNewChat = async () => {
   if (creatingChat.value) return
   creatingChat.value = true
@@ -633,18 +697,16 @@ const startNewChat = async () => {
   const newId = await createRemoteConversation()
 
   if (newId) {
-    // 构造一个新的历史记录项
     const newSession = {
       id: newId,
-      title: '空白对话', // 初始标题，后续可通过总结接口更新
+      title: '空白对话',
       messages: [],
       loaded: true,
     }
 
-    // 更新状态
     history.value.unshift(newSession)
     activeSessionId.value = newId
-    chatList.value = [] // 新会话消息为空
+    chatList.value = []
     currentView.value = 'chat'
   }
 
@@ -685,7 +747,6 @@ const scrollToBottom = async () => {
   }
 }
 
-// 修改点：发送消息逻辑 (支持自动创建会话)
 const sendMessage = async () => {
   const text = inputContent.value.trim()
   if (!text || isSending.value) return
@@ -693,14 +754,12 @@ const sendMessage = async () => {
   isSending.value = true
 
   try {
-    // 1. 如果没有当前会话（比如在欢迎页直接输入），先请求接口创建会话
     if (!activeSessionId.value) {
       const newId = await createRemoteConversation()
       if (!newId) {
         isSending.value = false
-        return // 创建失败，中断发送
+        return
       }
-      // 创建成功，更新本地状态
       const newSession = {
         id: newId,
         title: text.length > 10 ? text.substring(0, 10) + '...' : text,
@@ -712,14 +771,11 @@ const sendMessage = async () => {
       chatList.value = newSession.messages
     }
 
-    // 2. 添加用户消息到界面
     chatList.value.push({ role: 'user', content: text })
 
-    // 同步更新左侧历史列表中的数据
     const currentHistoryItem = history.value.find((h) => h.id === activeSessionId.value)
     if (currentHistoryItem) {
       currentHistoryItem.messages.push({ role: 'user', content: text })
-      // 如果是新会话，更新标题
       if (currentHistoryItem.title === '新对话') {
         currentHistoryItem.title = text.length > 10 ? text.substring(0, 10) + '...' : text
       }
@@ -728,7 +784,6 @@ const sendMessage = async () => {
     inputContent.value = ''
     scrollToBottom()
 
-    // 3. 模拟 AI 回复 (AI 正在输入...)
     chatList.value.push({ role: 'ai', content: '', loading: true })
     scrollToBottom()
 
@@ -772,7 +827,39 @@ const logout = () => {
 </script>
 
 <style scoped>
-/* ==================== 新增样式 ==================== */
+/* ==================== 修改点：右键菜单样式 ==================== */
+.context-menu {
+  position: fixed;
+  z-index: 9999;
+  background: #fff;
+  border-radius: 6px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+  padding: 5px 0;
+  min-width: 120px;
+  border: 1px solid #ebeef5;
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #606266;
+  transition: background 0.2s;
+}
+
+.context-menu-item:hover {
+  background: #f5f7fa;
+  color: #f56c6c; /* 红色高亮，提示删除操作 */
+}
+
+.context-menu-item.delete {
+  /* 可以为删除按钮专门加一些样式 */
+}
+/* ==================== 结束新增样式 ==================== */
+
 .config-switcher {
   background: #fafafa;
   border: 1px solid #e8e8e8;
@@ -803,7 +890,6 @@ const logout = () => {
   margin-top: 20px;
 }
 
-/* ==================== 原有样式 ==================== */
 .layout {
   height: 100vh;
   background: #f8f8f9;
