@@ -28,7 +28,6 @@
         <span>任务创建</span>
       </div>
 
-      <!-- ==================== 新增：当前模型配置快速切换 ==================== -->
       <div class="section-title" style="margin-top: 25px">选择对话模型</div>
       <div class="config-switcher">
         <el-select
@@ -50,10 +49,10 @@
         <div class="active-config-tip no-config" v-else>未选择配置</div>
       </div>
 
-      <!-- ==================== 历史对话 ==================== -->
       <div class="section-title" style="margin-top: 25px">历史对话</div>
 
-      <div class="history-list">
+      <div class="history-list" v-loading="loadingHistory">
+        <div v-if="history.length === 0 && !loadingHistory" class="empty-history">暂无历史记录</div>
         <div
           v-for="(item, index) in history"
           :key="item.id"
@@ -62,7 +61,7 @@
           @click="selectHistory(item.id)"
         >
           <el-icon><Menu /></el-icon>
-          <span class="text">{{ item.title }}</span>
+          <span class="text" :title="item.title">{{ item.title }}</span>
         </div>
       </div>
 
@@ -84,7 +83,6 @@
     </el-aside>
 
     <el-main class="main-area">
-      <!-- ==================== 配置管理 ==================== -->
       <div v-if="currentView === 'keys'" class="config-view-wrapper">
         <div class="config-card">
           <div class="config-header">
@@ -150,7 +148,6 @@
           </div>
         </div>
 
-        <!-- 新增/编辑对话框 -->
         <el-dialog
           v-model="configDialogVisible"
           :title="isEditMode ? '编辑配置' : '新增配置'"
@@ -218,7 +215,6 @@
         </el-dialog>
       </div>
 
-      <!-- 任务占位页面 -->
       <div v-else-if="currentView === 'tasks'" class="placeholder-view">
         <div class="placeholder-content">
           <el-icon size="60" color="#ddd"><DocumentAdd /></el-icon>
@@ -227,7 +223,6 @@
         </div>
       </div>
 
-      <!-- 聊天界面 -->
       <div v-else class="chat-layout">
         <div class="message-container" ref="messageContainerRef">
           <div v-if="chatList.length === 0" class="welcome-wrapper">
@@ -320,7 +315,8 @@ const loadUserInfo = () => {
   if (storedUsername) {
     username.value = storedUsername
     email.value = storedEmail || '未设置邮箱'
-    userId.value = storedUserId || 123456
+    // 确保 userId 转为数字或字符串，取决于后端需求，这里假设存储时是字符串
+    userId.value = storedUserId ? storedUserId : 1
   } else {
     ElMessage.warning('请先登录')
     router.push('/login')
@@ -336,9 +332,9 @@ const switchView = (viewName) => {
   }
 }
 
-// ==================== 新增：模型配置快速切换 ====================
-const availableConfigs = ref([]) // 所有配置名
-const activeConfigName = ref('') // 当前激活的配置名
+// ==================== 模型配置快速切换 ====================
+const availableConfigs = ref([])
+const activeConfigName = ref('')
 const configSelectLoading = ref(false)
 
 const fetchAvailableConfigs = async () => {
@@ -350,7 +346,6 @@ const fetchAvailableConfigs = async () => {
     const res = await resp.json()
     if (res.code === 200 && Array.isArray(res.data)) {
       availableConfigs.value = res.data
-      // 恢复上次选择的配置（如果还存在）
       const saved = localStorage.getItem('activeConfigName')
       if (saved && availableConfigs.value.includes(saved)) {
         activeConfigName.value = saved
@@ -360,7 +355,6 @@ const fetchAvailableConfigs = async () => {
     }
   } catch (e) {
     console.error(e)
-    ElMessage.error('请求配置列表出错')
   } finally {
     configSelectLoading.value = false
   }
@@ -372,7 +366,7 @@ const handleConfigChange = (val) => {
     ElMessage.success(`已切换到配置：${val}`)
   } else {
     localStorage.removeItem('activeConfigName')
-    ElMessage.info('已清除配置选择，使用默认模型')
+    ElMessage.info('已清除配置选择')
   }
 }
 
@@ -426,7 +420,6 @@ const fetchConfigs = async () => {
       ElMessage.error(res.message || '获取配置列表失败')
     }
   } catch (error) {
-    console.error(error)
     ElMessage.error('网络请求失败')
   } finally {
     loadingConfigs.value = false
@@ -468,7 +461,7 @@ const submitConfig = async () => {
           ElMessage.success(isEditMode.value ? '更新成功' : '创建成功')
           configDialogVisible.value = false
           fetchConfigs()
-          fetchAvailableConfigs() // 新增/编辑后刷新快速切换列表
+          fetchAvailableConfigs()
         } else {
           ElMessage.error(res.message || '操作失败')
         }
@@ -497,7 +490,7 @@ const handleDeleteConfig = (row) => {
           pagination.pageNumber -= 1
         }
         fetchConfigs()
-        fetchAvailableConfigs() // 删除后刷新快速切换列表
+        fetchAvailableConfigs()
         if (activeConfigName.value === row.configurationName) {
           activeConfigName.value = ''
           localStorage.removeItem('activeConfigName')
@@ -511,42 +504,61 @@ const handleDeleteConfig = (row) => {
   })
 }
 
-// ---------- 聊天相关 ----------
+// ---------- 聊天与历史记录 ----------
 const activeSessionId = ref(null)
 const inputContent = ref('')
 const isSending = ref(false)
 const messageContainerRef = ref(null)
 const chatList = ref([])
 
-const history = ref([
-  {
-    id: 1,
-    title: '如何合成聚乙烯',
-    messages: [
-      { role: 'user', content: '请问如何合成聚乙烯？' },
-      { role: 'ai', content: '聚乙烯（PE）通常通过乙烯的聚合反应合成...' },
-    ],
-  },
-  {
-    id: 2,
-    title: '量子化学基础',
-    messages: [
-      { role: 'user', content: '解释一下薛定谔方程。' },
-      { role: 'ai', content: '薛定谔方程是量子力学的核心方程...' },
-    ],
-  },
-])
+// 历史记录列表，默认为空，等待接口加载
+const history = ref([])
+const loadingHistory = ref(false)
+
+// 新增：获取历史记录的函数
+const fetchHistory = async () => {
+  if (!userId.value) return
+  loadingHistory.value = true
+  try {
+    const url = `${API_BASE_URL}/chat/conversation/${userId.value}/history`
+    const resp = await fetch(url)
+    const res = await resp.json()
+
+    if (res.code === 200 && res.data && res.data.conversationHistory) {
+      // 映射后端数据结构到前端需要的数据结构
+      // 注意：后端返回 role 为 'assistant'，前端 CSS 样式判断的是 'ai'
+      history.value = res.data.conversationHistory.map((item) => {
+        return {
+          id: item.conversationId, // 映射 conversationId -> id
+          title: item.summary, // 映射 summary -> title
+          messages: item.messages.map((msg) => ({
+            role: msg.role === 'assistant' ? 'ai' : msg.role, // 角色转换
+            content: msg.content,
+          })),
+        }
+      })
+    } else {
+      history.value = [] // 没有数据或出错时置空
+    }
+  } catch (error) {
+    console.error('Fetch history error:', error)
+    ElMessage.error('获取历史记录失败')
+  } finally {
+    loadingHistory.value = false
+  }
+}
 
 onMounted(() => {
   loadUserInfo()
 })
 
-// 监听 userId 变化后加载配置列表
+// 监听 userId 变化后加载配置列表和历史记录
 watch(
   userId,
   (id) => {
     if (id) {
       fetchAvailableConfigs()
+      fetchHistory() // ID 存在时，拉取历史记录
     }
   },
   { immediate: true },
@@ -564,7 +576,8 @@ const selectHistory = (id) => {
   activeSessionId.value = id
   const targetSession = history.value.find((item) => item.id === id)
   if (targetSession) {
-    chatList.value = targetSession.messages
+    // 拷贝一份，防止直接修改 history 里的引用（可选）
+    chatList.value = JSON.parse(JSON.stringify(targetSession.messages))
     scrollToBottom()
   }
 }
@@ -580,19 +593,29 @@ const sendMessage = () => {
   const text = inputContent.value.trim()
   if (!text || isSending.value) return
 
+  // 如果是新会话
   if (!activeSessionId.value) {
-    const newId = Date.now()
+    const newId = Date.now() // 临时 ID，实际项目中可能需要后端创建并返回 ID
     const newSession = {
       id: newId,
       title: text.length > 10 ? text.substring(0, 10) + '...' : text,
       messages: [],
     }
+    // 插入到历史记录最前面
     history.value.unshift(newSession)
     activeSessionId.value = newId
     chatList.value = newSession.messages
   }
 
+  // 添加用户消息
   chatList.value.push({ role: 'user', content: text })
+
+  // 同时更新左侧历史列表中的数据（保持同步）
+  const currentHistoryItem = history.value.find((h) => h.id === activeSessionId.value)
+  if (currentHistoryItem) {
+    currentHistoryItem.messages.push({ role: 'user', content: text })
+  }
+
   inputContent.value = ''
   scrollToBottom()
 
@@ -601,11 +624,21 @@ const sendMessage = () => {
   scrollToBottom()
 
   setTimeout(() => {
+    // 移除 loading
     chatList.value.pop()
-    chatList.value.push({
+
+    const aiResponse = {
       role: 'ai',
       content: `[模拟回复] 针对 "${text}" 的分析结果。\n当前使用的配置：${activeConfigName.value || '没有模型'}`,
-    })
+    }
+
+    chatList.value.push(aiResponse)
+
+    // 同步更新历史数据
+    if (currentHistoryItem) {
+      currentHistoryItem.messages.push(aiResponse)
+    }
+
     isSending.value = false
     scrollToBottom()
   }, 1000)
@@ -651,8 +684,14 @@ const logout = () => {
 .active-config-tip.no-config {
   color: #999;
 }
+.empty-history {
+  text-align: center;
+  color: #999;
+  font-size: 13px;
+  margin-top: 20px;
+}
 
-/* ==================== 原有样式（全部保留） ==================== */
+/* ==================== 原有样式 ==================== */
 .layout {
   height: 100vh;
   background: #f8f8f9;
