@@ -247,7 +247,7 @@
                 <div v-if="msg.loading" class="typing-indicator">
                   <span></span><span></span><span></span>
                 </div>
-                <div v-else>{{ msg.content }}</div>
+                <div v-else style="white-space: pre-wrap">{{ msg.content }}</div>
               </div>
             </div>
           </div>
@@ -301,7 +301,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, nextTick, onMounted, onUnmounted, watch } from 'vue' // 添加 onUnmounted
+import { ref, reactive, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   ChatRound,
@@ -312,7 +312,7 @@ import {
   Promotion,
   Loading,
   Plus,
-  Delete, // 新增 Delete 图标
+  Delete,
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
@@ -541,7 +541,7 @@ const history = ref([])
 const loadingHistory = ref(false)
 const loadingMessages = ref(false)
 
-// ==================== 修改点：右键菜单逻辑 ====================
+// 右键菜单状态
 const contextMenuVisible = ref(false)
 const contextMenuX = ref(0)
 const contextMenuY = ref(0)
@@ -551,17 +551,16 @@ const openContextMenu = (event, item) => {
   contextMenuVisible.value = true
   contextMenuX.value = event.clientX
   contextMenuY.value = event.clientY
-  contextMenuTargetId.value = item.id // 记录要删除的对话 ID
+  contextMenuTargetId.value = item.id
 }
 
 const closeContextMenu = () => {
   contextMenuVisible.value = false
 }
 
-// 全局监听点击，关闭右键菜单
 onMounted(() => {
   window.addEventListener('click', closeContextMenu)
-  loadUserInfo() // 原有的 onMounted 逻辑
+  loadUserInfo()
 })
 
 onUnmounted(() => {
@@ -584,16 +583,10 @@ const handleDeleteHistory = () => {
 
         if (res.code === 200) {
           ElMessage.success('删除成功')
-
-          // 1. 从列表中移除
           history.value = history.value.filter((h) => h.id !== contextMenuTargetId.value)
-
-          // 2. 如果删除的是当前选中的会话，清空当前视图
           if (activeSessionId.value === contextMenuTargetId.value) {
             activeSessionId.value = null
             chatList.value = []
-            // 可选：如果列表不为空，自动选中第一个；或者保持空白
-            // if (history.value.length > 0) selectHistory(history.value[0].id)
           }
         } else {
           ElMessage.error(res.message || '删除失败')
@@ -603,11 +596,8 @@ const handleDeleteHistory = () => {
         ElMessage.error('网络请求错误')
       }
     })
-    .catch(() => {
-      // 取消删除
-    })
+    .catch(() => {})
 }
-// ==================== 结束右键菜单逻辑 ====================
 
 const fetchHistory = async () => {
   if (!userId.value) return
@@ -747,13 +737,55 @@ const scrollToBottom = async () => {
   }
 }
 
+// ==================== 核心修改：保存消息和发送消息逻辑 ====================
+
+/**
+ * 调用接口 1：保存消息到数据库
+ * @param role 角色 'user' | 'assistant'
+ * @param content 内容
+ */
+const saveMessageToRemote = async (role, content) => {
+  if (!userId.value || !activeSessionId.value) return false
+  try {
+    const url = `${API_BASE_URL}/chat/conversation/${userId.value}/${activeSessionId.value}/message/add`
+    const body = {
+      role: role,
+      content: content,
+    }
+    const resp = await fetch(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    const res = await resp.json()
+    return res.code === 200
+  } catch (e) {
+    console.error('Save Message Error:', e)
+    return false
+  }
+}
+
+/**
+ * 发送消息：
+ * 1. 校验 & 创建会话
+ * 2. 调用接口保存 User 消息
+ * 3. 调用流式接口获取 AI 响应
+ * 4. 流式结束调用接口保存 AI 消息
+ */
 const sendMessage = async () => {
   const text = inputContent.value.trim()
+
+  // 1. 基础校验
   if (!text || isSending.value) return
+  if (!activeConfigName.value) {
+    ElMessage.warning('请先在左侧配置管理或下拉框中选择一个对话模型配置')
+    return
+  }
 
   isSending.value = true
 
   try {
+    // 2. 如果没有会话，先创建
     if (!activeSessionId.value) {
       const newId = await createRemoteConversation()
       if (!newId) {
@@ -771,43 +803,115 @@ const sendMessage = async () => {
       chatList.value = newSession.messages
     }
 
-    chatList.value.push({ role: 'user', content: text })
+    // 3. UI 立即显示用户消息
+    const userMsg = { role: 'user', content: text }
+    chatList.value.push(userMsg)
 
+    // 同步到 history 对象（用于缓存）
     const currentHistoryItem = history.value.find((h) => h.id === activeSessionId.value)
     if (currentHistoryItem) {
-      currentHistoryItem.messages.push({ role: 'user', content: text })
-      if (currentHistoryItem.title === '新对话') {
+      currentHistoryItem.messages.push(userMsg)
+      // 更新标题（如果是新对话）
+      if (currentHistoryItem.title === '空白对话' || currentHistoryItem.title === '新对话') {
         currentHistoryItem.title = text.length > 10 ? text.substring(0, 10) + '...' : text
       }
     }
-
     inputContent.value = ''
     scrollToBottom()
 
-    chatList.value.push({ role: 'ai', content: '', loading: true })
+    // 4. 调用 API 保存用户消息
+    const saveUserSuccess = await saveMessageToRemote('user', text)
+    if (!saveUserSuccess) {
+      ElMessage.warning('消息保存失败，但将尝试继续获取回答...')
+    }
+
+    // 5. 准备 AI 消息占位（loading 状态）
+    const aiMsg = reactive({ role: 'ai', content: '', loading: true })
+    chatList.value.push(aiMsg)
+    if (currentHistoryItem) {
+      currentHistoryItem.messages.push(aiMsg)
+    }
     scrollToBottom()
 
-    setTimeout(() => {
-      chatList.value.pop()
+    // 6. 请求流式接口
+    const streamUrl = `${API_BASE_URL}/chat/call/stream`
+    const requestBody = {
+      userId: Number(userId.value),
+      configurationName: activeConfigName.value,
+      conversationId: activeSessionId.value,
+      userQuestion: text,
+    }
 
-      const aiResponse = {
-        role: 'ai',
-        content: `[模拟回复] 会话ID: ${activeSessionId.value}\n针对 "${text}" 的分析结果。\n当前使用的配置：${activeConfigName.value || '没有模型'}`,
+    const response = await fetch(streamUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody),
+    })
+
+    if (!response.ok || !response.body) {
+      throw new Error('Network response was not ok')
+    }
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder('utf-8')
+    let fullContent = ''
+
+    // 7. 读取流
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      const chunk = decoder.decode(value, { stream: true })
+      const lines = chunk.split('\n')
+
+      for (const line of lines) {
+        const trimmedLine = line.trim()
+        if (!trimmedLine || !trimmedLine.startsWith('data:')) continue
+
+        const dataStr = trimmedLine.replace('data:', '')
+
+        // 检查结束标记
+        if (dataStr.trim() === '[DONE]') break
+
+        try {
+          const json = JSON.parse(dataStr)
+          // 提取 content
+          const deltaContent = json.choices?.[0]?.delta?.content
+          if (deltaContent) {
+            // 第一次收到内容时，取消 loading 状态
+            if (aiMsg.loading) aiMsg.loading = false
+
+            aiMsg.content += deltaContent
+            fullContent += deltaContent
+            scrollToBottom()
+          }
+        } catch (err) {
+          // 忽略解析错误的行（可能是空行或格式不完整的片段）
+        }
       }
+    }
 
-      chatList.value.push(aiResponse)
+    // 确保 loading 结束
+    aiMsg.loading = false
 
-      if (currentHistoryItem) {
-        currentHistoryItem.messages.push(aiResponse)
-      }
-
-      isSending.value = false
-      scrollToBottom()
-    }, 1000)
+    // 8. 流式结束后，保存完整的 AI 消息
+    if (fullContent) {
+      await saveMessageToRemote('assistant', fullContent)
+    }
   } catch (e) {
-    console.error(e)
+    console.error('Chat Error:', e)
+    ElMessage.error('获取回答失败，请检查网络或配置')
+    // 如果出错，把最后的 loading 消息标记为错误或移除，这里简单去掉 loading
+    if (chatList.value.length > 0) {
+      const lastMsg = chatList.value[chatList.value.length - 1]
+      if (lastMsg.role === 'ai' && lastMsg.loading) {
+        lastMsg.loading = false
+        lastMsg.content = '（请求出错）'
+      }
+    }
+  } finally {
     isSending.value = false
-    ElMessage.error('发送失败')
+    scrollToBottom()
   }
 }
 
@@ -827,7 +931,7 @@ const logout = () => {
 </script>
 
 <style scoped>
-/* ==================== 修改点：右键菜单样式 ==================== */
+/* 保持原有样式不变 */
 .context-menu {
   position: fixed;
   z-index: 9999;
@@ -852,19 +956,18 @@ const logout = () => {
 
 .context-menu-item:hover {
   background: #f5f7fa;
-  color: #f56c6c; /* 红色高亮，提示删除操作 */
+  color: #f56c6c;
 }
 
 .context-menu-item.delete {
-  color: #f56c6c; /* 默认文字颜色设为红色 */
-  font-weight: 500; /* 稍微加粗一点，强调操作 */
+  color: #f56c6c;
+  font-weight: 500;
 }
 
 .context-menu-item.delete:hover {
-  background: #fef0f0; /* 悬停时背景变为浅红色 */
-  color: #f56c6c; /* 保持文字红色 */
+  background: #fef0f0;
+  color: #f56c6c;
 }
-/* ==================== 结束新增样式 ==================== */
 
 .config-switcher {
   background: #fafafa;
