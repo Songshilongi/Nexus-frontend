@@ -696,7 +696,8 @@ const startNewChat = async () => {
 
     history.value.unshift(newSession)
     activeSessionId.value = newId
-    chatList.value = []
+    // [修复1]：让 chatList 直接引用 newSession.messages，确保引用一致性
+    chatList.value = newSession.messages
     currentView.value = 'chat'
   }
 
@@ -711,6 +712,7 @@ const selectHistory = async (id) => {
   if (!targetSession) return
 
   if (targetSession.loaded) {
+    // 这里 chatList.value 指向了 targetSession.messages 的内存地址
     chatList.value = targetSession.messages
     scrollToBottom()
   } else {
@@ -800,17 +802,20 @@ const sendMessage = async () => {
       }
       history.value.unshift(newSession)
       activeSessionId.value = newId
+      // 确保引用一致
       chatList.value = newSession.messages
     }
 
     // 3. UI 立即显示用户消息
     const userMsg = { role: 'user', content: text }
+
+    // [修复2]：因为 chatList 引用了 History 中的 messages，所以只需要 push 到 chatList 即可
     chatList.value.push(userMsg)
 
-    // 同步到 history 对象（用于缓存）
+    // 同步到 history 对象（仅用于更新标题）
     const currentHistoryItem = history.value.find((h) => h.id === activeSessionId.value)
     if (currentHistoryItem) {
-      currentHistoryItem.messages.push(userMsg)
+      // 这里的 .push(userMsg) 被删除了，防止重复
       // 更新标题（如果是新对话）
       if (currentHistoryItem.title === '空白对话' || currentHistoryItem.title === '新对话') {
         currentHistoryItem.title = text.length > 10 ? text.substring(0, 10) + '...' : text
@@ -827,10 +832,10 @@ const sendMessage = async () => {
 
     // 5. 准备 AI 消息占位（loading 状态）
     const aiMsg = reactive({ role: 'ai', content: '', loading: true })
+
+    // [修复3]：同样，只 push 到 chatList，引用会自动更新 History
     chatList.value.push(aiMsg)
-    if (currentHistoryItem) {
-      currentHistoryItem.messages.push(aiMsg)
-    }
+
     scrollToBottom()
 
     // 6. 请求流式接口
