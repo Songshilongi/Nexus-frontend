@@ -224,7 +224,7 @@
       </div>
 
       <div v-else class="chat-layout">
-        <div class="message-container" ref="messageContainerRef">
+        <div class="message-container" ref="messageContainerRef" v-loading="loadingMessages">
           <div v-if="chatList.length === 0" class="welcome-wrapper">
             <div class="welcome-hi">你好，{{ username }}！</div>
             <div class="welcome-q">今天需要我帮你做点什么吗？</div>
@@ -302,6 +302,19 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 const router = useRouter()
 const API_BASE_URL = 'http://localhost:9002/api/chat-service'
 
+// ---------- 工具函数：解决 Long 类型精度丢失 ----------
+// 使用正则将 JSON 字符串中超过 16 位的数字加上双引号，转换为字符串
+const safeJSONParse = (text) => {
+  try {
+    // 匹配 ": " 后面跟随的16位以上数字，并将其包裹在双引号中
+    const patchedText = text.replace(/":\s*(\d{16,})/g, '": "$1"')
+    return JSON.parse(patchedText)
+  } catch (e) {
+    console.error('JSON Parse Error:', e)
+    return null
+  }
+}
+
 // ---------- 用户信息 ----------
 const username = ref('加载中...')
 const email = ref('')
@@ -315,7 +328,6 @@ const loadUserInfo = () => {
   if (storedUsername) {
     username.value = storedUsername
     email.value = storedEmail || '未设置邮箱'
-    // 确保 userId 转为数字或字符串，取决于后端需求，这里假设存储时是字符串
     userId.value = storedUserId ? storedUserId : 1
   } else {
     ElMessage.warning('请先登录')
@@ -511,34 +523,35 @@ const isSending = ref(false)
 const messageContainerRef = ref(null)
 const chatList = ref([])
 
-// 历史记录列表，默认为空，等待接口加载
+// 历史记录列表
 const history = ref([])
 const loadingHistory = ref(false)
+// 对话详情加载状态
+const loadingMessages = ref(false)
 
-// 新增：获取历史记录的函数
+// 1. 修改：获取历史记录 (处理精度丢失)
 const fetchHistory = async () => {
   if (!userId.value) return
   loadingHistory.value = true
   try {
     const url = `${API_BASE_URL}/chat/conversation/${userId.value}/history`
     const resp = await fetch(url)
-    const res = await resp.json()
+    const rawText = await resp.text()
+    // 使用 safeJSONParse 代替 resp.json()
+    const res = safeJSONParse(rawText)
 
-    if (res.code === 200 && res.data && res.data.conversationHistory) {
-      // 映射后端数据结构到前端需要的数据结构
-      // 注意：后端返回 role 为 'assistant'，前端 CSS 样式判断的是 'ai'
+    if (res && res.code === 200 && res.data && res.data.conversationHistory) {
+      // 映射后端数据：ID现在是字符串，不会丢失精度
       history.value = res.data.conversationHistory.map((item) => {
         return {
-          id: item.conversationId, // 映射 conversationId -> id
-          title: item.summary, // 映射 summary -> title
-          messages: item.messages.map((msg) => ({
-            role: msg.role === 'assistant' ? 'ai' : msg.role, // 角色转换
-            content: msg.content,
-          })),
+          id: item.conversationId, // 这是一个字符串 "199..."
+          title: item.summary,
+          messages: [],
+          loaded: false,
         }
       })
     } else {
-      history.value = [] // 没有数据或出错时置空
+      history.value = []
     }
   } catch (error) {
     console.error('Fetch history error:', error)
@@ -548,17 +561,39 @@ const fetchHistory = async () => {
   }
 }
 
+// 2. 修改：根据 conversationId 获取详细消息 (处理精度丢失)
+const fetchConversationDetail = async (conversationId) => {
+  // 这里的 conversationId 已经是 String 类型，可以直接拼接到 URL
+  const url = `${API_BASE_URL}/chat/conversation/${userId.value}/detail/${conversationId}`
+  try {
+    const resp = await fetch(url)
+    const rawText = await resp.text()
+    // 同样使用 safeJSONParse 防止返回的 JSON 中 ID 精度丢失 (虽然这里主要用 content)
+    const res = safeJSONParse(rawText)
+
+    if (res && res.code === 200 && res.data) {
+      return res.data.messages.map((msg) => ({
+        role: msg.role === 'assistant' ? 'ai' : msg.role,
+        content: msg.content,
+      }))
+    }
+  } catch (error) {
+    console.error('Fetch detail error:', error)
+    ElMessage.error('获取对话详情失败')
+  }
+  return []
+}
+
 onMounted(() => {
   loadUserInfo()
 })
 
-// 监听 userId 变化后加载配置列表和历史记录
 watch(
   userId,
   (id) => {
     if (id) {
       fetchAvailableConfigs()
-      fetchHistory() // ID 存在时，拉取历史记录
+      fetchHistory()
     }
   },
   { immediate: true },
@@ -571,14 +606,32 @@ const startNewChat = () => {
   inputContent.value = ''
 }
 
-const selectHistory = (id) => {
+// 3. 点击历史记录
+const selectHistory = async (id) => {
   currentView.value = 'chat'
-  activeSessionId.value = id
+  activeSessionId.value = id // id 是 String
+
   const targetSession = history.value.find((item) => item.id === id)
-  if (targetSession) {
-    // 拷贝一份，防止直接修改 history 里的引用（可选）
-    chatList.value = JSON.parse(JSON.stringify(targetSession.messages))
+  if (!targetSession) return
+
+  if (targetSession.loaded) {
+    chatList.value = targetSession.messages
     scrollToBottom()
+  } else {
+    chatList.value = []
+    loadingMessages.value = true
+
+    // 传入正确的 String 类型 ID
+    const messages = await fetchConversationDetail(id)
+
+    targetSession.messages = messages
+    targetSession.loaded = true
+
+    if (activeSessionId.value === id) {
+      chatList.value = messages
+      scrollToBottom()
+    }
+    loadingMessages.value = false
   }
 }
 
@@ -595,13 +648,14 @@ const sendMessage = () => {
 
   // 如果是新会话
   if (!activeSessionId.value) {
-    const newId = Date.now() // 临时 ID，实际项目中可能需要后端创建并返回 ID
+    // 生成临时 ID (String)
+    const newId = Date.now().toString()
     const newSession = {
       id: newId,
       title: text.length > 10 ? text.substring(0, 10) + '...' : text,
       messages: [],
+      loaded: true,
     }
-    // 插入到历史记录最前面
     history.value.unshift(newSession)
     activeSessionId.value = newId
     chatList.value = newSession.messages
@@ -610,7 +664,7 @@ const sendMessage = () => {
   // 添加用户消息
   chatList.value.push({ role: 'user', content: text })
 
-  // 同时更新左侧历史列表中的数据（保持同步）
+  // 同步更新左侧历史列表中的数据
   const currentHistoryItem = history.value.find((h) => h.id === activeSessionId.value)
   if (currentHistoryItem) {
     currentHistoryItem.messages.push({ role: 'user', content: text })
@@ -624,7 +678,6 @@ const sendMessage = () => {
   scrollToBottom()
 
   setTimeout(() => {
-    // 移除 loading
     chatList.value.pop()
 
     const aiResponse = {
@@ -634,7 +687,6 @@ const sendMessage = () => {
 
     chatList.value.push(aiResponse)
 
-    // 同步更新历史数据
     if (currentHistoryItem) {
       currentHistoryItem.messages.push(aiResponse)
     }
