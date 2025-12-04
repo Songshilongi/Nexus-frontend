@@ -1,17 +1,22 @@
 <template>
-  <div class="pixel-bg">
-    <div class="auth-wrapper">
-      <div class="auth-card pixel-border">
-        <h2 class="title">{{ modeTitle }}</h2>
+  <div class="login-container">
+    <div class="login-content">
+      <div class="header-area">
+        <div class="logo-text">Chemical AI</div>
+        <div class="subtitle">Based on Multi-Model Agents</div>
+      </div>
+
+      <div class="auth-card">
+        <h2 class="form-title">{{ modeTitle }}</h2>
 
         <el-form
           :model="form"
           :rules="dynamicRules"
           ref="formRef"
           label-position="top"
-          size="default"
+          size="large"
+          class="auth-form"
         >
-          <!-- 登录 -->
           <template v-if="mode === 'login'">
             <el-form-item label="用户名" prop="loginId">
               <el-input v-model="form.loginId" placeholder="请输入用户名" clearable />
@@ -23,21 +28,21 @@
                 v-model="form.password"
                 placeholder="请输入密码"
                 show-password
+                @keydown.enter="handleSubmit"
               />
             </el-form-item>
 
             <div class="login-options">
               <el-checkbox v-model="form.remember">记住我</el-checkbox>
-              <el-button type="text" class="link" @click="switchMode('reset')">
+              <el-button link type="primary" class="forgot-btn" @click="switchMode('reset')">
                 忘记密码？
               </el-button>
             </div>
           </template>
 
-          <!-- 注册 -->
           <template v-if="mode === 'register'">
             <el-form-item label="用户名" prop="username">
-              <el-input v-model="form.username" placeholder="设置用户名" clearable />
+              <el-input v-model="form.username" placeholder="设置用户名 (2-20字符)" clearable />
             </el-form-item>
 
             <el-form-item label="邮箱" prop="email">
@@ -48,7 +53,7 @@
               <el-input
                 type="password"
                 v-model="form.password"
-                placeholder="设置密码"
+                placeholder="设置密码 (8位以上，含数字大小写)"
                 show-password
               />
             </el-form-item>
@@ -63,7 +68,6 @@
             </el-form-item>
           </template>
 
-          <!-- 找回密码 -->
           <template v-if="mode === 'reset'">
             <el-form-item label="用户名" prop="resetUsername">
               <el-input v-model="form.resetUsername" placeholder="请输入用户名" clearable />
@@ -74,22 +78,24 @@
             </el-form-item>
 
             <el-form-item label="验证码" prop="code">
-              <el-row :gutter="8">
-                <el-col :span="14">
-                  <el-input v-model="form.code" placeholder="10位验证码" maxlength="10" clearable />
-                </el-col>
-                <el-col :span="10">
-                  <el-button
-                    type="primary"
-                    class="pixel-btn"
-                    :disabled="codeCountdown > 0 || loading"
-                    @click="sendResetCode"
-                    style="width: 100%"
-                  >
-                    {{ codeCountdown > 0 ? `${codeCountdown}s` : '获取验证码' }}
-                  </el-button>
-                </el-col>
-              </el-row>
+              <div class="code-row">
+                <el-input
+                  v-model="form.code"
+                  placeholder="10位验证码"
+                  maxlength="10"
+                  clearable
+                  class="code-input"
+                />
+                <el-button
+                  type="primary"
+                  plain
+                  class="code-btn"
+                  :disabled="codeCountdown > 0 || loading"
+                  @click="sendResetCode"
+                >
+                  {{ codeCountdown > 0 ? `${codeCountdown}s 后重试` : '获取验证码' }}
+                </el-button>
+              </div>
             </el-form-item>
 
             <el-form-item label="新密码" prop="newPassword">
@@ -102,28 +108,27 @@
             </el-form-item>
           </template>
 
-          <!-- 按钮 -->
           <el-button
             type="primary"
             :loading="loading"
-            class="submit-btn pixel-btn"
+            class="submit-btn"
             @click="handleSubmit"
+            round
           >
             {{ mainButtonText }}
           </el-button>
 
-          <el-button
-            v-if="mode === 'login'"
-            type="text"
-            class="link"
-            @click="switchMode('register')"
-          >
-            没有账号？立即注册
-          </el-button>
-
-          <el-button v-if="mode !== 'login'" type="text" class="link" @click="switchMode('login')">
-            返回登录
-          </el-button>
+          <div class="bottom-links">
+            <template v-if="mode === 'login'">
+              <span class="text-muted">还没有账号？</span>
+              <el-button link type="primary" @click="switchMode('register')"> 立即注册 </el-button>
+            </template>
+            <template v-else>
+              <el-button link type="primary" @click="switchMode('login')">
+                <span style="font-size: 14px">← 返回登录</span>
+              </el-button>
+            </template>
+          </div>
         </el-form>
       </div>
 
@@ -159,29 +164,23 @@ const form = ref({
   newPassword: '',
 })
 
-// 密码强度正则
 const passwordPattern = /^(?=.*\d)(?=.*[a-z])(?=.*[A-Z]).{8,}$/
 
 const rules = {
   loginId: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
-
   username: [
     { required: true, message: '请设置用户名', trigger: 'blur' },
     { max: 20, message: '用户名长度不能超过20个字符', trigger: 'blur' },
   ],
-
   resetUsername: [
     { required: true, message: '请输入用户名', trigger: 'blur' },
     { max: 20, message: '用户名长度不能超过20个字符', trigger: 'blur' },
   ],
-
   email: [
     { required: true, message: '请输入邮箱', trigger: 'blur' },
     { type: 'email', message: '邮箱格式不正确', trigger: 'blur' },
   ],
-
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
-
   passwordForRegister: [
     { required: true, message: '请输入密码', trigger: 'blur' },
     {
@@ -190,7 +189,6 @@ const rules = {
       trigger: 'blur',
     },
   ],
-
   confirmPassword: [
     { required: true, message: '请确认密码', trigger: 'blur' },
     {
@@ -201,15 +199,10 @@ const rules = {
       trigger: 'blur',
     },
   ],
-
-  // 关键修改：验证码改为 10 位
   code: [
     { required: true, message: '请输入验证码', trigger: 'blur' },
-    { len: 10, message: '验证码为10位字母', trigger: 'blur' },
-    // 如果你想强制只能是字母，也可以加上这个正则（可选）
-    // { pattern: /^[A-Za-z]{10}$/, message: '验证码必须为10位字母', trigger: 'blur' }
+    { len: 10, message: '验证码为10位字符', trigger: 'blur' },
   ],
-
   newPassword: [
     { required: true, message: '请设置新密码', trigger: 'blur' },
     {
@@ -220,7 +213,6 @@ const rules = {
   ],
 }
 
-// 动态密码规则
 const passwordRules = computed(() => {
   if (mode.value === 'login') return rules.password
   if (mode.value === 'register') return rules.passwordForRegister
@@ -236,9 +228,9 @@ const dynamicRules = computed(() => ({
 const modeTitle = computed(
   () =>
     ({
-      login: '用户登录',
-      register: '注册新账号',
-      reset: '找回密码',
+      login: '欢迎回来',
+      register: '创建新账号',
+      reset: '重置密码',
     })[mode.value],
 )
 
@@ -246,8 +238,8 @@ const mainButtonText = computed(
   () =>
     ({
       login: '登录',
-      register: '提交注册',
-      reset: '完成重置',
+      register: '注册',
+      reset: '重置密码',
     })[mode.value],
 )
 
@@ -260,16 +252,6 @@ function switchMode(next) {
   clearCountdown()
 }
 
-function showField(field) {
-  if (mode.value === 'login') return ['loginId', 'password'].includes(field)
-  if (mode.value === 'register')
-    return ['username', 'email', 'password', 'confirmPassword'].includes(field)
-  if (mode.value === 'reset')
-    return ['resetUsername', 'email', 'code', 'newPassword'].includes(field)
-  return false
-}
-
-// 接口调用（保持不变）
 async function register() {
   const res = await userServiceApi.post('/register', {
     username: form.value.username.trim(),
@@ -374,98 +356,190 @@ function clearCountdown() {
 }
 
 onUnmounted(clearCountdown)
-
-function quickRegister() {
-  switchMode('register')
-}
 </script>
 
 <style scoped>
-/* 渐变天空背景 */
-.pixel-bg {
-  height: 100vh;
+/* 容器：与 ChatView 背景色一致 */
+.login-container {
+  min-height: 100vh;
   width: 100%;
-  background: linear-gradient(to bottom, #fceec7, #9be0f5, #74c7f7);
+  background-color: #f8f8f9;
   display: flex;
   justify-content: center;
   align-items: center;
-  font-family: 'PixelOperator', monospace;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
-/* 主布局 */
-.auth-wrapper {
+.login-content {
   display: flex;
   flex-direction: column;
   align-items: center;
+  width: 100%;
+  padding: 20px;
 }
 
-/* 像素风外框 */
-.pixel-border {
-  border: 4px solid #222;
-  padding: 28px;
-  background: #ffffffdd;
-  box-shadow: 0 0 0 4px #000 inset;
-  border-radius: 4px;
-  width: 420px;
-  animation: cardPop 0.4s ease-out;
-}
-
-/* 卡片弹出动画 */
-@keyframes cardPop {
-  0% {
-    transform: scale(0.85);
-    opacity: 0;
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
-.title {
+/* 头部 Logo 区域 */
+.header-area {
   text-align: center;
-  font-size: 22px;
-  font-weight: bold;
-  margin-bottom: 20px;
+  margin-bottom: 30px;
+  animation: fadeInDown 0.6s ease-out;
 }
 
-/* 像素按钮风格 */
-.pixel-btn {
-  font-size: 16px !important;
-  border: 3px solid #000 !important;
-  padding: 10px 0 !important;
-  background: #ffe97f !important;
-  box-shadow: 4px 4px 0 #000;
-  transition: transform 0.1s ease;
+.logo-text {
+  font-size: 32px;
+  font-weight: 800;
+  /* 使用与 ChatView 欢迎语一致的蓝色渐变 */
+  background: linear-gradient(to right, #2c7bf6, #5ca9ff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  letter-spacing: -0.5px;
 }
 
-.pixel-btn:hover {
-  transform: translate(-2px, -2px);
-  box-shadow: 6px 6px 0 #000;
+.subtitle {
+  font-size: 14px;
+  color: #999;
+  margin-top: 6px;
+  letter-spacing: 2px;
 }
 
-.pixel-btn:active {
-  transform: translate(2px, 2px);
-  box-shadow: 1px 1px 0 #000;
+/* 卡片样式：现代化、阴影、圆角 */
+.auth-card {
+  width: 100%;
+  max-width: 440px;
+  background: #ffffff;
+  border-radius: 16px;
+  /* 柔和的阴影，去除像素风的硬边框 */
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  padding: 40px;
+  animation: fadeInUp 0.6s ease-out;
 }
 
+.form-title {
+  text-align: center;
+  font-size: 20px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 30px;
+}
+
+/* 表单细节 */
+.auth-form :deep(.el-form-item__label) {
+  font-weight: 500;
+  color: #666;
+  padding-bottom: 6px;
+}
+
+.auth-form :deep(.el-input__wrapper) {
+  box-shadow: 0 0 0 1px #dcdfe6 inset;
+  border-radius: 8px; /* 输入框圆角 */
+  padding: 1px 11px;
+}
+
+.auth-form :deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 1px #7a8cff inset !important;
+}
+
+.login-options {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.forgot-btn {
+  color: #7a8cff;
+}
+
+.forgot-btn:hover {
+  color: #6b7de0;
+}
+
+/* 验证码行 */
+.code-row {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+}
+.code-input {
+  flex: 1;
+}
+.code-btn {
+  border-radius: 8px;
+}
+
+/* 提交按钮：使用 ChatView 主色调 */
 .submit-btn {
   width: 100%;
-  margin-top: 12px;
+  font-size: 16px;
+  padding: 22px 0; /* 增加高度 */
+  background-color: #7a8cff;
+  border-color: #7a8cff;
+  border-radius: 8px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  margin-bottom: 20px;
+  transition: all 0.2s;
 }
 
-/* 文本链接按钮 */
-.link {
-  width: 100%;
-  margin-top: 10px;
+.submit-btn:hover {
+  background-color: #6b7de0;
+  border-color: #6b7de0;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(122, 140, 255, 0.3);
+}
+
+.submit-btn:active {
+  transform: translateY(0);
+}
+
+/* 底部链接 */
+.bottom-links {
+  text-align: center;
   font-size: 14px;
+}
+
+.text-muted {
+  color: #999;
+}
+
+.bottom-links :deep(.el-button) {
+  color: #7a8cff;
+  font-weight: 600;
+}
+
+.bottom-links :deep(.el-button:hover) {
+  color: #6b7de0;
+}
+
+.footer {
+  margin-top: 30px;
+  font-size: 12px;
+  color: #ccc;
   text-align: center;
 }
 
-/* 底部版权 */
-.footer {
-  margin-top: 20px;
-  font-size: 13px;
-  opacity: 0.7;
+/* 动画 */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 </style>
