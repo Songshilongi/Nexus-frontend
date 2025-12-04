@@ -10,8 +10,11 @@
         :class="{ active: currentView === 'chat' && !activeSessionId && chatList.length === 0 }"
         @click="startNewChat"
       >
-        <el-icon><ChatRound /></el-icon>
-        <span>新建对话</span>
+        <el-icon :class="{ 'is-loading': creatingChat }">
+          <Loading v-if="creatingChat" />
+          <ChatRound v-else />
+        </el-icon>
+        <span>{{ creatingChat ? '创建中...' : '新建对话' }}</span>
       </div>
 
       <div class="menu-btn" :class="{ active: currentView === 'keys' }" @click="switchView('keys')">
@@ -520,6 +523,7 @@ const handleDeleteConfig = (row) => {
 const activeSessionId = ref(null)
 const inputContent = ref('')
 const isSending = ref(false)
+const creatingChat = ref(false) // 新增：控制创建对话的loading
 const messageContainerRef = ref(null)
 const chatList = ref([])
 
@@ -529,7 +533,6 @@ const loadingHistory = ref(false)
 // 对话详情加载状态
 const loadingMessages = ref(false)
 
-// 1. 修改：获取历史记录 (处理精度丢失)
 const fetchHistory = async () => {
   if (!userId.value) return
   loadingHistory.value = true
@@ -561,14 +564,13 @@ const fetchHistory = async () => {
   }
 }
 
-// 2. 修改：根据 conversationId 获取详细消息 (处理精度丢失)
 const fetchConversationDetail = async (conversationId) => {
-  // 这里的 conversationId 已经是 String 类型，可以直接拼接到 URL
+  // 这里的 conversationId 已经是 String 类型
   const url = `${API_BASE_URL}/chat/conversation/${userId.value}/detail/${conversationId}`
   try {
     const resp = await fetch(url)
     const rawText = await resp.text()
-    // 同样使用 safeJSONParse 防止返回的 JSON 中 ID 精度丢失 (虽然这里主要用 content)
+    // 同样使用 safeJSONParse 防止返回的 JSON 中 ID 精度丢失
     const res = safeJSONParse(rawText)
 
     if (res && res.code === 200 && res.data) {
@@ -599,17 +601,59 @@ watch(
   { immediate: true },
 )
 
-const startNewChat = () => {
-  currentView.value = 'chat'
-  activeSessionId.value = null
-  chatList.value = []
-  inputContent.value = ''
+// 修改点：辅助函数 - 调用后端创建会话
+const createRemoteConversation = async () => {
+  if (!userId.value) return null
+  try {
+    const url = `${API_BASE_URL}/chat/conversation/${userId.value}/create`
+    const resp = await fetch(url, { method: 'POST' })
+    const rawText = await resp.text()
+    // 必须使用 safeJSONParse 处理 Long 类型 ID
+    const res = safeJSONParse(rawText)
+
+    if (res && res.code === 200) {
+      // res.data 就是 conversationId (String类型)
+      return res.data
+    } else {
+      ElMessage.error(res?.message || '创建会话失败')
+      return null
+    }
+  } catch (e) {
+    console.error('Create Chat Error:', e)
+    ElMessage.error('创建会话网络请求错误')
+    return null
+  }
 }
 
-// 3. 点击历史记录
+// 修改点：点击"新建对话"
+const startNewChat = async () => {
+  if (creatingChat.value) return
+  creatingChat.value = true
+
+  const newId = await createRemoteConversation()
+
+  if (newId) {
+    // 构造一个新的历史记录项
+    const newSession = {
+      id: newId,
+      title: '空白对话', // 初始标题，后续可通过总结接口更新
+      messages: [],
+      loaded: true,
+    }
+
+    // 更新状态
+    history.value.unshift(newSession)
+    activeSessionId.value = newId
+    chatList.value = [] // 新会话消息为空
+    currentView.value = 'chat'
+  }
+
+  creatingChat.value = false
+}
+
 const selectHistory = async (id) => {
   currentView.value = 'chat'
-  activeSessionId.value = id // id 是 String
+  activeSessionId.value = id
 
   const targetSession = history.value.find((item) => item.id === id)
   if (!targetSession) return
@@ -621,7 +665,6 @@ const selectHistory = async (id) => {
     chatList.value = []
     loadingMessages.value = true
 
-    // 传入正确的 String 类型 ID
     const messages = await fetchConversationDetail(id)
 
     targetSession.messages = messages
@@ -642,58 +685,75 @@ const scrollToBottom = async () => {
   }
 }
 
-const sendMessage = () => {
+// 修改点：发送消息逻辑 (支持自动创建会话)
+const sendMessage = async () => {
   const text = inputContent.value.trim()
   if (!text || isSending.value) return
 
-  // 如果是新会话
-  if (!activeSessionId.value) {
-    // 生成临时 ID (String)
-    const newId = Date.now().toString()
-    const newSession = {
-      id: newId,
-      title: text.length > 10 ? text.substring(0, 10) + '...' : text,
-      messages: [],
-      loaded: true,
-    }
-    history.value.unshift(newSession)
-    activeSessionId.value = newId
-    chatList.value = newSession.messages
-  }
-
-  // 添加用户消息
-  chatList.value.push({ role: 'user', content: text })
-
-  // 同步更新左侧历史列表中的数据
-  const currentHistoryItem = history.value.find((h) => h.id === activeSessionId.value)
-  if (currentHistoryItem) {
-    currentHistoryItem.messages.push({ role: 'user', content: text })
-  }
-
-  inputContent.value = ''
-  scrollToBottom()
-
   isSending.value = true
-  chatList.value.push({ role: 'ai', content: '', loading: true })
-  scrollToBottom()
 
-  setTimeout(() => {
-    chatList.value.pop()
-
-    const aiResponse = {
-      role: 'ai',
-      content: `[模拟回复] 针对 "${text}" 的分析结果。\n当前使用的配置：${activeConfigName.value || '没有模型'}`,
+  try {
+    // 1. 如果没有当前会话（比如在欢迎页直接输入），先请求接口创建会话
+    if (!activeSessionId.value) {
+      const newId = await createRemoteConversation()
+      if (!newId) {
+        isSending.value = false
+        return // 创建失败，中断发送
+      }
+      // 创建成功，更新本地状态
+      const newSession = {
+        id: newId,
+        title: text.length > 10 ? text.substring(0, 10) + '...' : text,
+        messages: [],
+        loaded: true,
+      }
+      history.value.unshift(newSession)
+      activeSessionId.value = newId
+      chatList.value = newSession.messages
     }
 
-    chatList.value.push(aiResponse)
+    // 2. 添加用户消息到界面
+    chatList.value.push({ role: 'user', content: text })
 
+    // 同步更新左侧历史列表中的数据
+    const currentHistoryItem = history.value.find((h) => h.id === activeSessionId.value)
     if (currentHistoryItem) {
-      currentHistoryItem.messages.push(aiResponse)
+      currentHistoryItem.messages.push({ role: 'user', content: text })
+      // 如果是新会话，更新标题
+      if (currentHistoryItem.title === '新对话') {
+        currentHistoryItem.title = text.length > 10 ? text.substring(0, 10) + '...' : text
+      }
     }
 
-    isSending.value = false
+    inputContent.value = ''
     scrollToBottom()
-  }, 1000)
+
+    // 3. 模拟 AI 回复 (AI 正在输入...)
+    chatList.value.push({ role: 'ai', content: '', loading: true })
+    scrollToBottom()
+
+    setTimeout(() => {
+      chatList.value.pop()
+
+      const aiResponse = {
+        role: 'ai',
+        content: `[模拟回复] 会话ID: ${activeSessionId.value}\n针对 "${text}" 的分析结果。\n当前使用的配置：${activeConfigName.value || '没有模型'}`,
+      }
+
+      chatList.value.push(aiResponse)
+
+      if (currentHistoryItem) {
+        currentHistoryItem.messages.push(aiResponse)
+      }
+
+      isSending.value = false
+      scrollToBottom()
+    }, 1000)
+  } catch (e) {
+    console.error(e)
+    isSending.value = false
+    ElMessage.error('发送失败')
+  }
 }
 
 const handleUserCommand = (command) => {
