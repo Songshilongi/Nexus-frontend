@@ -855,6 +855,7 @@ const sendMessage = async () => {
     const reader = response.body.getReader()
     const decoder = new TextDecoder('utf-8')
     let fullContent = ''
+    let buffer = '' // [修复关键]: 引入 buffer 解决分包截断问题
 
     // 7. 读取流
     while (true) {
@@ -862,7 +863,14 @@ const sendMessage = async () => {
       if (done) break
 
       const chunk = decoder.decode(value, { stream: true })
-      const lines = chunk.split('\n')
+      buffer += chunk // 将新收到的数据追加到 buffer
+
+      // 按换行符分割，但保留最后一个可能不完整的片段
+      const lines = buffer.split('\n')
+
+      // 弹出最后一个元素（它可能是不完整的 JSON，留到下一次循环处理）
+      // 如果 buffer 以 \n 结尾，lines.pop() 会是一个空字符串，也没关系
+      buffer = lines.pop()
 
       for (const line of lines) {
         const trimmedLine = line.trim()
@@ -886,7 +894,8 @@ const sendMessage = async () => {
             scrollToBottom()
           }
         } catch (err) {
-          // 忽略解析错误的行（可能是空行或格式不完整的片段）
+          // 现在这里触发错误的概率大大降低，因为我们保证了处理的一定是完整的行
+          console.warn('JSON Parse Warning (skipped):', err)
         }
       }
     }
