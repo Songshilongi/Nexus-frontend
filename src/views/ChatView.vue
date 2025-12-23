@@ -22,6 +22,11 @@
         <span>配置管理</span>
       </div>
 
+      <div class="menu-btn" :class="{ active: currentView === 'mcp' }" @click="switchView('mcp')">
+        <el-icon><Connection /></el-icon>
+        <span>MCP 资源</span>
+      </div>
+
       <div
         class="menu-btn"
         :class="{ active: currentView === 'tasks' }"
@@ -219,6 +224,103 @@
         </el-dialog>
       </div>
 
+      <div v-else-if="currentView === 'mcp'" class="config-view-wrapper">
+        <div class="config-card">
+          <div class="config-header">
+            <div class="header-left">
+              <h2>MCP 资源管理</h2>
+              <p class="subtitle">管理您的 Model Context Protocol (MCP) 资源链接</p>
+            </div>
+            <el-button type="primary" class="add-btn" @click="openCreateMcp">
+              <el-icon style="margin-right: 4px"><Plus /></el-icon> 新增资源
+            </el-button>
+          </div>
+
+          <div class="table-container">
+            <el-table
+              :data="mcpList"
+              v-loading="loadingMcp"
+              style="width: 100%"
+              height="100%"
+              :header-cell-style="{ background: '#f8f8f9', color: '#666', fontWeight: '600' }"
+            >
+              <el-table-column prop="resourceName" label="资源名称" min-width="140" />
+              <el-table-column
+                prop="endpoint"
+                label="Endpoint (端点)"
+                min-width="200"
+                show-overflow-tooltip
+              />
+              <el-table-column prop="note" label="备注" min-width="150" show-overflow-tooltip />
+              <el-table-column label="操作" width="140" fixed="right" align="center">
+                <template #default="scope">
+                  <el-button link type="primary" size="small" @click="openEditMcp(scope.row)">
+                    编辑
+                  </el-button>
+                  <el-divider direction="vertical" />
+                  <el-button link type="danger" size="small" @click="handleDeleteMcp(scope.row)">
+                    删除
+                  </el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+
+          <div class="pagination-wrapper">
+            <el-pagination
+              v-model:current-page="mcpPagination.pageNumber"
+              v-model:page-size="mcpPagination.pageSize"
+              :page-sizes="[5, 10, 20]"
+              :total="mcpPagination.total"
+              layout="total, sizes, prev, pager, next, jumper"
+              @size-change="fetchMcpList"
+              @current-change="fetchMcpList"
+            />
+          </div>
+        </div>
+
+        <el-dialog
+          v-model="mcpDialogVisible"
+          :title="isMcpEditMode ? '编辑 MCP 资源' : '新增 MCP 资源'"
+          width="480px"
+          class="custom-dialog"
+          destroy-on-close
+          align-center
+        >
+          <el-form :model="mcpForm" :rules="mcpRules" ref="mcpFormRef" label-position="top">
+            <el-form-item label="资源名称" prop="resourceName">
+              <el-input
+                v-model="mcpForm.resourceName"
+                placeholder="请输入资源名称"
+                :disabled="isMcpEditMode"
+              />
+              <div v-if="isMcpEditMode" class="form-tip">名称作为唯一标识不可修改</div>
+            </el-form-item>
+
+            <el-form-item label="端点 (Endpoint)" prop="endpoint">
+              <el-input v-model="mcpForm.endpoint" placeholder="http://..." />
+            </el-form-item>
+
+            <el-form-item label="备注" prop="note">
+              <el-input
+                v-model="mcpForm.note"
+                type="textarea"
+                :rows="3"
+                placeholder="可选备注信息"
+              />
+            </el-form-item>
+          </el-form>
+          <template #footer>
+            <div class="dialog-footer">
+              <el-button @click="mcpDialogVisible = false">取消</el-button>
+              <el-button type="primary" :loading="submittingMcp" @click="submitMcp">
+                保存资源
+              </el-button>
+            </div>
+          </template>
+        </el-dialog>
+      </div>
+
       <div v-else-if="currentView === 'tasks'" class="placeholder-view">
         <div class="placeholder-content">
           <el-icon size="60" color="#ddd"><DocumentAdd /></el-icon>
@@ -242,7 +344,6 @@
               :class="msg.role === 'user' ? 'msg-right' : 'msg-left'"
             >
               <div v-if="msg.role === 'ai'" class="msg-avatar ai-avatar">AI</div>
-
               <div class="msg-bubble">
                 <div v-if="msg.loading" class="typing-indicator">
                   <span></span><span></span><span></span>
@@ -313,13 +414,13 @@ import {
   Loading,
   Plus,
   Delete,
+  Connection,
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const router = useRouter()
 const API_BASE_URL = 'http://localhost:9002/api/chat-service'
 
-// ---------- 工具函数：解决 Long 类型精度丢失 ----------
 const safeJSONParse = (text) => {
   try {
     const patchedText = text.replace(/":\s*(\d{16,})/g, '": "$1"')
@@ -330,7 +431,6 @@ const safeJSONParse = (text) => {
   }
 }
 
-// ---------- 用户信息 ----------
 const username = ref('加载中...')
 const email = ref('')
 const userId = ref(null)
@@ -350,16 +450,16 @@ const loadUserInfo = () => {
   }
 }
 
-// ---------- 视图状态 ----------
 const currentView = ref('chat')
 const switchView = (viewName) => {
   currentView.value = viewName
   if (viewName === 'keys') {
     fetchConfigs()
+  } else if (viewName === 'mcp') {
+    fetchMcpList()
   }
 }
 
-// ==================== 模型配置快速切换 ====================
 const availableConfigs = ref([])
 const activeConfigName = ref('')
 const configSelectLoading = ref(false)
@@ -397,7 +497,7 @@ const handleConfigChange = (val) => {
   }
 }
 
-// ==================== 配置管理（分页）===================
+// ==================== 配置管理 ====================
 const configList = ref([])
 const loadingConfigs = ref(false)
 const pagination = reactive({
@@ -529,7 +629,123 @@ const handleDeleteConfig = (row) => {
   })
 }
 
-// ---------- 聊天与历史记录 ----------
+// ==================== MCP 资源管理 ====================
+const mcpList = ref([])
+const loadingMcp = ref(false)
+const mcpPagination = reactive({
+  pageNumber: 1,
+  pageSize: 5,
+  total: 0,
+})
+const mcpDialogVisible = ref(false)
+const isMcpEditMode = ref(false)
+const submittingMcp = ref(false)
+const mcpFormRef = ref(null)
+
+const mcpForm = reactive({
+  resourceName: '',
+  endpoint: '',
+  note: '',
+})
+
+const mcpRules = {
+  resourceName: [{ required: true, message: '请输入资源名称', trigger: 'blur' }],
+  endpoint: [{ required: true, message: '请输入端点地址', trigger: 'blur' }],
+}
+
+const fetchMcpList = async () => {
+  if (!userId.value) return
+  loadingMcp.value = true
+  try {
+    const url = `${API_BASE_URL}/mcp-manager/${userId.value}/resources/list?pageNumber=${mcpPagination.pageNumber}&pageSize=${mcpPagination.pageSize}`
+    const response = await fetch(url)
+    const res = await response.json()
+    if (res.code === 200) {
+      mcpList.value = res.data.result || []
+      mcpPagination.total = res.data.total || 0
+      mcpPagination.pageNumber = res.data.pageNumber
+      mcpPagination.pageSize = res.data.pageSize
+    } else {
+      ElMessage.error(res.message || '获取 MCP 列表失败')
+    }
+  } catch (error) {
+    ElMessage.error('网络请求失败')
+  } finally {
+    loadingMcp.value = false
+  }
+}
+
+const openCreateMcp = () => {
+  isMcpEditMode.value = false
+  Object.assign(mcpForm, {
+    resourceName: '',
+    endpoint: '',
+    note: '',
+  })
+  mcpDialogVisible.value = true
+}
+
+const openEditMcp = (row) => {
+  isMcpEditMode.value = true
+  Object.assign(mcpForm, { ...row })
+  mcpDialogVisible.value = true
+}
+
+const submitMcp = async () => {
+  if (!mcpFormRef.value) return
+  await mcpFormRef.value.validate(async (valid) => {
+    if (valid) {
+      submittingMcp.value = true
+      try {
+        const method = isMcpEditMode.value ? 'PUT' : 'POST'
+        const response = await fetch(`${API_BASE_URL}/mcp-manager/${userId.value}/resources`, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(mcpForm),
+        })
+        const res = await response.json()
+        if (res.code === 200) {
+          ElMessage.success(isMcpEditMode.value ? '更新成功' : '创建成功')
+          mcpDialogVisible.value = false
+          fetchMcpList()
+        } else {
+          ElMessage.error(res.message || '操作失败')
+        }
+      } catch (error) {
+        ElMessage.error('网络请求错误')
+      } finally {
+        submittingMcp.value = false
+      }
+    }
+  })
+}
+
+const handleDeleteMcp = (row) => {
+  ElMessageBox.confirm(`确定要删除资源 "${row.resourceName}" 吗？`, '删除确认', {
+    type: 'warning',
+  }).then(async () => {
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/mcp-manager/${userId.value}/resources/${encodeURIComponent(row.resourceName)}`,
+        { method: 'DELETE' },
+      )
+      const res = await response.json()
+      if (res.code === 200) {
+        ElMessage.success('删除成功')
+        if (mcpList.value.length === 1 && mcpPagination.pageNumber > 1) {
+          mcpPagination.pageNumber -= 1
+        }
+        fetchMcpList()
+      } else {
+        ElMessage.error(res.message || '删除失败')
+      }
+    } catch (error) {
+      ElMessage.error('网络请求错误')
+    }
+  })
+}
+
+// ==================== 聊天与历史记录 ====================
 const activeSessionId = ref(null)
 const inputContent = ref('')
 const isSending = ref(false)
@@ -541,7 +757,6 @@ const history = ref([])
 const loadingHistory = ref(false)
 const loadingMessages = ref(false)
 
-// 右键菜单状态
 const contextMenuVisible = ref(false)
 const contextMenuX = ref(0)
 const contextMenuY = ref(0)
@@ -568,9 +783,7 @@ onUnmounted(() => {
 })
 
 const handleDeleteHistory = () => {
-  // 1. 【新增】点击后立即隐藏右键菜单
   contextMenuVisible.value = false
-
   if (!contextMenuTargetId.value) return
 
   ElMessageBox.confirm('确定要删除这条对话记录吗？删除后无法恢复。', '删除警告', {
@@ -699,7 +912,6 @@ const startNewChat = async () => {
 
     history.value.unshift(newSession)
     activeSessionId.value = newId
-    // [修复1]：让 chatList 直接引用 newSession.messages，确保引用一致性
     chatList.value = newSession.messages
     currentView.value = 'chat'
   }
@@ -715,7 +927,6 @@ const selectHistory = async (id) => {
   if (!targetSession) return
 
   if (targetSession.loaded) {
-    // 这里 chatList.value 指向了 targetSession.messages 的内存地址
     chatList.value = targetSession.messages
     scrollToBottom()
   } else {
@@ -742,13 +953,6 @@ const scrollToBottom = async () => {
   }
 }
 
-// ==================== 核心修改：保存消息和发送消息逻辑 ====================
-
-/**
- * 调用接口 1：保存消息到数据库
- * @param role 角色 'user' | 'assistant'
- * @param content 内容
- */
 const saveMessageToRemote = async (role, content) => {
   if (!userId.value || !activeSessionId.value) return false
   try {
@@ -770,17 +974,9 @@ const saveMessageToRemote = async (role, content) => {
   }
 }
 
-/**
- * 发送消息：
- * 1. 校验 & 创建会话
- * 2. 调用接口保存 User 消息
- * 3. 调用流式接口获取 AI 响应
- * 4. 流式结束调用接口保存 AI 消息
- */
 const sendMessage = async () => {
   const text = inputContent.value.trim()
 
-  // 1. 基础校验
   if (!text || isSending.value) return
   if (!activeConfigName.value) {
     ElMessage.warning('请先在左侧配置管理或下拉框中选择一个对话模型配置')
@@ -790,7 +986,6 @@ const sendMessage = async () => {
   isSending.value = true
 
   try {
-    // 2. 如果没有会话，先创建
     if (!activeSessionId.value) {
       const newId = await createRemoteConversation()
       if (!newId) {
@@ -805,21 +1000,14 @@ const sendMessage = async () => {
       }
       history.value.unshift(newSession)
       activeSessionId.value = newId
-      // 确保引用一致
       chatList.value = newSession.messages
     }
 
-    // 3. UI 立即显示用户消息
     const userMsg = { role: 'user', content: text }
-
-    // [修复2]：因为 chatList 引用了 History 中的 messages，所以只需要 push 到 chatList 即可
     chatList.value.push(userMsg)
 
-    // 同步到 history 对象（仅用于更新标题）
     const currentHistoryItem = history.value.find((h) => h.id === activeSessionId.value)
     if (currentHistoryItem) {
-      // 这里的 .push(userMsg) 被删除了，防止重复
-      // 更新标题（如果是新对话）
       if (currentHistoryItem.title === '空白对话' || currentHistoryItem.title === '新对话') {
         currentHistoryItem.title = text.length > 10 ? text.substring(0, 10) + '...' : text
       }
@@ -827,21 +1015,15 @@ const sendMessage = async () => {
     inputContent.value = ''
     scrollToBottom()
 
-    // 4. 调用 API 保存用户消息
     const saveUserSuccess = await saveMessageToRemote('user', text)
     if (!saveUserSuccess) {
       ElMessage.warning('消息保存失败，但将尝试继续获取回答...')
     }
 
-    // 5. 准备 AI 消息占位（loading 状态）
     const aiMsg = reactive({ role: 'ai', content: '', loading: true })
-
-    // [修复3]：同样，只 push 到 chatList，引用会自动更新 History
     chatList.value.push(aiMsg)
-
     scrollToBottom()
 
-    // 6. 请求流式接口
     const streamUrl = `${API_BASE_URL}/chat/call/stream`
     const requestBody = {
       userId: Number(userId.value),
@@ -863,62 +1045,45 @@ const sendMessage = async () => {
     const reader = response.body.getReader()
     const decoder = new TextDecoder('utf-8')
     let fullContent = ''
-    let buffer = '' // [修复关键]: 引入 buffer 解决分包截断问题
+    let buffer = ''
 
-    // 7. 读取流
     while (true) {
       const { done, value } = await reader.read()
       if (done) break
 
       const chunk = decoder.decode(value, { stream: true })
-      buffer += chunk // 将新收到的数据追加到 buffer
+      buffer += chunk
 
-      // 按换行符分割，但保留最后一个可能不完整的片段
       const lines = buffer.split('\n')
-
-      // 弹出最后一个元素（它可能是不完整的 JSON，留到下一次循环处理）
-      // 如果 buffer 以 \n 结尾，lines.pop() 会是一个空字符串，也没关系
       buffer = lines.pop()
 
       for (const line of lines) {
         const trimmedLine = line.trim()
         if (!trimmedLine || !trimmedLine.startsWith('data:')) continue
-
         const dataStr = trimmedLine.replace('data:', '')
-
-        // 检查结束标记
         if (dataStr.trim() === '[DONE]') break
-
         try {
           const json = JSON.parse(dataStr)
-          // 提取 content
           const deltaContent = json.choices?.[0]?.delta?.content
           if (deltaContent) {
-            // 第一次收到内容时，取消 loading 状态
             if (aiMsg.loading) aiMsg.loading = false
-
             aiMsg.content += deltaContent
             fullContent += deltaContent
             scrollToBottom()
           }
         } catch (err) {
-          // 现在这里触发错误的概率大大降低，因为我们保证了处理的一定是完整的行
           console.warn('JSON Parse Warning (skipped):', err)
         }
       }
     }
 
-    // 确保 loading 结束
     aiMsg.loading = false
-
-    // 8. 流式结束后，保存完整的 AI 消息
     if (fullContent) {
       await saveMessageToRemote('assistant', fullContent)
     }
   } catch (e) {
     console.error('Chat Error:', e)
     ElMessage.error('获取回答失败，请检查网络或配置')
-    // 如果出错，把最后的 loading 消息标记为错误或移除，这里简单去掉 loading
     if (chatList.value.length > 0) {
       const lastMsg = chatList.value[chatList.value.length - 1]
       if (lastMsg.role === 'ai' && lastMsg.loading) {
@@ -1231,35 +1396,26 @@ const logout = () => {
   min-height: 400px;
 }
 .welcome-hi {
-  /* 1. 调整字体大小和粗细 */
-  font-size: 30px; /* 根据图片看字很大，可以根据实际需求调整为 48px - 64px */
+  font-size: 30px;
   font-weight: bold;
-
-  /* 2. 核心：实现蓝色渐变文字 */
-  background: linear-gradient(to right, #2c7bf6, #5ca9ff); /* 从深蓝到浅蓝的渐变 */
-  -webkit-background-clip: text; /* 将背景裁剪为文字形状 */
+  background: linear-gradient(to right, #2c7bf6, #5ca9ff);
+  -webkit-background-clip: text;
   background-clip: text;
-  color: transparent; /* 让文字本身的颜色变透明，透出背景的渐变 */
-
-  /* 3. 其他微调 */
+  color: transparent;
   margin-bottom: 20px;
-  letter-spacing: -1px; /* 大号字体稍微收紧一点间距更好看 */
+  letter-spacing: -1px;
   font-family:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 .welcome-q {
-  font-size: 30px; /* 根据图片看字很大，可以根据实际需求调整为 48px - 64px */
+  font-size: 30px;
   font-weight: bold;
-
-  /* 2. 核心：实现蓝色渐变文字 */
-  background: linear-gradient(to right, #2c7bf6, #5ca9ff); /* 从深蓝到浅蓝的渐变 */
-  -webkit-background-clip: text; /* 将背景裁剪为文字形状 */
+  background: linear-gradient(to right, #2c7bf6, #5ca9ff);
+  -webkit-background-clip: text;
   background-clip: text;
-  color: transparent; /* 让文字本身的颜色变透明，透出背景的渐变 */
-
-  /* 3. 其他微调 */
+  color: transparent;
   margin-bottom: 20px;
-  letter-spacing: -1px; /* 大号字体稍微收紧一点间距更好看 */
+  letter-spacing: -1px;
   font-family:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
