@@ -367,6 +367,15 @@
             <div class="input-footer">
               <div class="left-tools"></div>
               <div class="right-tools">
+                <div class="mcp-control" title="启用 MCP 工具调用">
+                  <span class="mcp-text" :class="{ 'is-active': isMcpEnabled }">MCP</span>
+                  <el-switch
+                    v-model="isMcpEnabled"
+                    size="small"
+                    style="--el-switch-on-color: #7a8cff"
+                  />
+                </div>
+                <el-divider direction="vertical" />
                 <span>{{ inputContent.length }}/200</span>
                 <el-button
                   circle
@@ -434,6 +443,9 @@ const safeJSONParse = (text) => {
 const username = ref('加载中...')
 const email = ref('')
 const userId = ref(null)
+
+// MCP 激活状态
+const isMcpEnabled = ref(false)
 
 const loadUserInfo = () => {
   const storedUsername = localStorage.getItem('username')
@@ -1030,6 +1042,7 @@ const sendMessage = async () => {
       configurationName: activeConfigName.value,
       conversationId: activeSessionId.value,
       userQuestion: text,
+      toolUseAllowed: isMcpEnabled.value,
     }
 
     const response = await fetch(streamUrl, {
@@ -1498,6 +1511,24 @@ const logout = () => {
   color: #999;
   font-size: 12px;
 }
+
+/* MCP Control Styles */
+.mcp-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.mcp-text {
+  font-size: 12px;
+  font-weight: 600;
+  color: #b1b3b8;
+  transition: color 0.3s;
+}
+.mcp-text.is-active {
+  color: #7a8cff;
+}
+
 .send-btn {
   background: #7a8cff;
   border: none;
