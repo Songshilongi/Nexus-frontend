@@ -549,10 +549,10 @@ const fetchConfigs = async () => {
     const response = await fetch(url)
     const res = await response.json()
     if (res.code === 200) {
-      configList.value = res.data.result || []
-      pagination.total = res.data.total || 0
-      pagination.pageNumber = res.data.pageNumber
-      pagination.pageSize = res.data.pageSize
+      configList.value = res.data?.result || [] // 如果 data 是 null，这里得到 undefined || []，即 []
+      pagination.total = res.data?.total || 0
+      pagination.pageNumber = res.data?.pageNumber || 1
+      pagination.pageSize = res.data?.pageSize || 10
     } else {
       ElMessage.error(res.message || '获取配置列表失败')
     }
@@ -673,10 +673,10 @@ const fetchMcpList = async () => {
     const response = await fetch(url)
     const res = await response.json()
     if (res.code === 200) {
-      mcpList.value = res.data.result || []
-      mcpPagination.total = res.data.total || 0
-      mcpPagination.pageNumber = res.data.pageNumber
-      mcpPagination.pageSize = res.data.pageSize
+      mcpList.value = res.data?.result || []
+      mcpPagination.total = res.data?.total || 0
+      mcpPagination.pageNumber = res.data?.pageNumber || 1
+      mcpPagination.pageSize = res.data?.pageSize || 10
     } else {
       ElMessage.error(res.message || '获取 MCP 列表失败')
     }
