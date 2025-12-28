@@ -2,7 +2,7 @@
   <el-container class="layout">
     <el-aside width="260px" class="sidebar">
       <div class="logo-area">
-        <div class="logo-text">Chemical AI Chat</div>
+        <div class="logo-text">Nexus AI Chat Room</div>
       </div>
 
       <div

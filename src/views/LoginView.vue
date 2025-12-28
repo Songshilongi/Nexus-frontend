@@ -2,7 +2,7 @@
   <div class="login-container">
     <div class="login-content">
       <div class="header-area">
-        <div class="logo-text">Chemical AI</div>
+        <div class="logo-text">Nexus AI</div>
         <div class="subtitle">Based on Multi-Model Agents</div>
       </div>
 
