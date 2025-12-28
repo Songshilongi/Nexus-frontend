@@ -348,7 +348,7 @@
                 <div v-if="msg.loading" class="typing-indicator">
                   <span></span><span></span><span></span>
                 </div>
-                <div v-else style="white-space: pre-wrap">{{ msg.content }}</div>
+                <div v-else class="markdown-body" v-html="renderMarkdown(msg.content)"></div>
               </div>
             </div>
           </div>
@@ -427,8 +427,36 @@ import {
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
+// --- Markdown 相关引入 ---
+import MarkdownIt from 'markdown-it'
+import hljs from 'highlight.js'
+import 'highlight.js/styles/atom-one-dark.css'
+
 const router = useRouter()
 const API_BASE_URL = 'http://localhost:9002/api/chat-service'
+
+// --- Markdown 配置 ---
+const md = new MarkdownIt({
+  html: false,
+  linkify: true,
+  typographer: true,
+  breaks: true,
+  highlight: function (str, lang) {
+    if (lang && hljs.getLanguage(lang)) {
+      try {
+        return `<pre class="hljs"><code>${
+          hljs.highlight(str, { language: lang, ignoreIllegals: true }).value
+        }</code></pre>`
+      } catch (__) {}
+    }
+    return `<pre class="hljs"><code>${md.utils.escapeHtml(str)}</code></pre>`
+  },
+})
+
+const renderMarkdown = (text) => {
+  if (!text) return ''
+  return md.render(text)
+}
 
 const safeJSONParse = (text) => {
   try {
@@ -549,7 +577,7 @@ const fetchConfigs = async () => {
     const response = await fetch(url)
     const res = await response.json()
     if (res.code === 200) {
-      configList.value = res.data?.result || [] // 如果 data 是 null，这里得到 undefined || []，即 []
+      configList.value = res.data?.result || []
       pagination.total = res.data?.total || 0
       pagination.pageNumber = res.data?.pageNumber || 1
       pagination.pageSize = res.data?.pageSize || 10
@@ -1442,7 +1470,7 @@ const logout = () => {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  max-width: 80%;
+  max-width: 90%;
 }
 .msg-left {
   align-self: flex-start;
@@ -1462,13 +1490,24 @@ const logout = () => {
   color: #fff;
   border-radius: 12px 0 12px 12px;
 }
+/* 给用户侧的消息也加上基本的 pre-wrap，防止用户输入的换行丢失，但不解析 md */
+.msg-right .msg-bubble .markdown-body {
+  white-space: pre-wrap;
+}
+
 .msg-bubble {
+  /* 核心修复：设置宽度为内容适应，防止过宽 */
+  width: fit-content;
+  max-width: 100%;
+
   padding: 12px 16px;
   font-size: 15px;
   line-height: 1.6;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.03);
   word-break: break-word;
+  /* 移除 overflow-x: auto，交由内部代码块处理，防止气泡意外出现滚动条 */
 }
+
 .ai-avatar {
   width: 36px;
   height: 36px;
@@ -1562,5 +1601,148 @@ const logout = () => {
   50% {
     transform: translateY(-4px);
   }
+}
+
+/* --- Markdown Styles (Github style + Dark mode for code) --- */
+:deep(.markdown-body) {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+/* 移除 Markdown 首尾元素的 margin，防止气泡内部留白过大 */
+:deep(.markdown-body > *:first-child) {
+  margin-top: 0;
+}
+:deep(.markdown-body > *:last-child) {
+  margin-bottom: 0;
+}
+
+:deep(.markdown-body h1),
+:deep(.markdown-body h2),
+:deep(.markdown-body h3) {
+  margin-top: 16px;
+  margin-bottom: 8px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+:deep(.markdown-body h1) {
+  font-size: 1.4em;
+  border-bottom: 1px solid #eaecef;
+  padding-bottom: 0.3em;
+}
+:deep(.markdown-body h2) {
+  font-size: 1.2em;
+  border-bottom: 1px solid #eaecef;
+  padding-bottom: 0.3em;
+}
+:deep(.markdown-body h3) {
+  font-size: 1.1em;
+}
+
+:deep(.markdown-body p) {
+  margin-bottom: 10px;
+}
+
+:deep(.markdown-body ul),
+:deep(.markdown-body ol) {
+  padding-left: 20px;
+  margin-bottom: 10px;
+}
+
+:deep(.markdown-body a) {
+  color: #0366d6;
+  text-decoration: none;
+}
+:deep(.markdown-body a:hover) {
+  text-decoration: underline;
+}
+
+:deep(.markdown-body blockquote) {
+  margin: 0 0 10px;
+  padding: 0 1em;
+  color: #6a737d;
+  border-left: 0.25em solid #dfe2e5;
+}
+
+/* Inline code */
+:deep(.markdown-body code) {
+  padding: 0.2em 0.4em;
+  margin: 0;
+  font-size: 85%;
+  background-color: rgba(27, 31, 35, 0.05);
+  border-radius: 3px;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+}
+
+/* Code Blocks (Pre) */
+:deep(.markdown-body pre) {
+  padding: 12px;
+  overflow: auto; /* 代码块内部滚动 */
+  font-size: 85%;
+  line-height: 1.45;
+  background-color: #282c34;
+  border-radius: 6px;
+  margin-bottom: 10px;
+  color: #abb2bf;
+}
+
+:deep(.markdown-body pre code) {
+  background-color: transparent;
+  padding: 0;
+  margin: 0;
+  font-size: 100%;
+  color: inherit;
+  white-space: pre;
+}
+
+/* Tables */
+:deep(.markdown-body table) {
+  display: block;
+  width: 100%;
+  overflow: auto; /* 表格内部滚动 */
+  margin-bottom: 10px;
+  border-collapse: collapse;
+}
+
+:deep(.markdown-body table th),
+:deep(.markdown-body table td) {
+  padding: 6px 13px;
+  border: 1px solid #dfe2e5;
+}
+
+:deep(.markdown-body table th) {
+  font-weight: 600;
+  background-color: #f6f8fa;
+}
+
+:deep(.markdown-body table tr) {
+  background-color: #fff;
+  border-top: 1px solid #c6cbd1;
+}
+
+:deep(.markdown-body table tr:nth-child(2n)) {
+  background-color: #f6f8fa;
+}
+
+/* 修复用户侧的气泡颜色冲突 */
+.msg-right :deep(.markdown-body) {
+  color: #fff;
+}
+/* 用户侧的代码块 */
+.msg-right :deep(.markdown-body code) {
+  color: #333;
+  background-color: rgba(255, 255, 255, 0.8);
+}
+.msg-right :deep(.markdown-body pre) {
+  background-color: #1e1e1e;
+}
+.msg-right :deep(.markdown-body pre code) {
+  color: #abb2bf;
+}
+.msg-right :deep(.markdown-body a) {
+  color: #e0e0e0;
+  text-decoration: underline;
 }
 </style>
