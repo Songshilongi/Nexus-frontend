@@ -2,7 +2,7 @@
 import axios from 'axios'
 
 const userServiceApi = axios.create({
-    baseURL: import.meta.env.VITE_APP_BASE_API || 'http://localhost:9001/api/user-service', // 你的后端地址，比如 http://localhost:8080
+    baseURL: import.meta.env.VITE_APP_BASE_API || 'http://localhost:9000/nexus/user-service', // 你的后端地址，比如 http://localhost:8080
     timeout: 10000,
     headers: {
         'Content-Type': 'application/json'

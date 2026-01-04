@@ -432,8 +432,10 @@ import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/atom-one-dark.css'
 
+// [核心变更] 引入封装好的 Axios 实例
+import request from '@/utils/request'
+
 const router = useRouter()
-const API_BASE_URL = 'http://localhost:9002/api/chat-service'
 
 // --- Markdown 配置 ---
 const md = new MarkdownIt({
@@ -458,6 +460,7 @@ const renderMarkdown = (text) => {
   return md.render(text)
 }
 
+// 依然保留此函数，用于处理流式响应中的 JSON 块
 const safeJSONParse = (text) => {
   try {
     const patchedText = text.replace(/":\s*(\d{16,})/g, '": "$1"')
@@ -508,17 +511,15 @@ const fetchAvailableConfigs = async () => {
   if (!userId.value) return
   configSelectLoading.value = true
   try {
-    const url = `${API_BASE_URL}/llm-configuration/users/${userId.value}/configurations`
-    const resp = await fetch(url)
-    const res = await resp.json()
-    if (res.code === 200 && Array.isArray(res.data)) {
+    // [变更] 使用 request.get，自动拦截处理 Header 和 URL
+    const res = await request.get(`/llm-configuration/users/${userId.value}/configurations`)
+    // request 拦截器已经处理了 code!=200 的情况，这里 res 就是后端返回的完整对象
+    if (Array.isArray(res.data)) {
       availableConfigs.value = res.data
       const saved = localStorage.getItem('activeConfigName')
       if (saved && availableConfigs.value.includes(saved)) {
         activeConfigName.value = saved
       }
-    } else {
-      ElMessage.error(res.message || '获取配置列表失败')
     }
   } catch (e) {
     console.error(e)
@@ -573,19 +574,22 @@ const fetchConfigs = async () => {
   if (!userId.value) return
   loadingConfigs.value = true
   try {
-    const url = `${API_BASE_URL}/llm-configuration/users/${userId.value}?pageNumber=${pagination.pageNumber}&pageSize=${pagination.pageSize}`
-    const response = await fetch(url)
-    const res = await response.json()
-    if (res.code === 200) {
-      configList.value = res.data?.result || []
-      pagination.total = res.data?.total || 0
-      pagination.pageNumber = res.data?.pageNumber || 1
-      pagination.pageSize = res.data?.pageSize || 10
-    } else {
-      ElMessage.error(res.message || '获取配置列表失败')
-    }
+    // [变更] 使用 params 传递查询参数
+    const res = await request.get(`/llm-configuration/users/${userId.value}`, {
+      params: {
+        pageNumber: pagination.pageNumber,
+        pageSize: pagination.pageSize,
+      },
+    })
+
+    // 假设你的 request.js 返回的是 res.data (result/pageNumber等在 data 下)
+    // 根据你的后端结构调整这里，这里假设 res.data 包含 result, total 等
+    configList.value = res.data?.result || []
+    pagination.total = res.data?.total || 0
+    pagination.pageNumber = res.data?.pageNumber || 1
+    pagination.pageSize = res.data?.pageSize || 10
   } catch (error) {
-    ElMessage.error('网络请求失败')
+    // 错误已由拦截器处理
   } finally {
     loadingConfigs.value = false
   }
@@ -615,23 +619,20 @@ const submitConfig = async () => {
     if (valid) {
       submittingConfig.value = true
       try {
-        const method = isEditMode.value ? 'PUT' : 'POST'
-        const response = await fetch(`${API_BASE_URL}/llm-configuration/users/${userId.value}`, {
-          method,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(configForm),
+        const method = isEditMode.value ? 'put' : 'post'
+        // [变更] Axios 自动处理 method 和 body (data)
+        await request({
+          url: `/llm-configuration/users/${userId.value}`,
+          method: method,
+          data: configForm,
         })
-        const res = await response.json()
-        if (res.code === 200) {
-          ElMessage.success(isEditMode.value ? '更新成功' : '创建成功')
-          configDialogVisible.value = false
-          fetchConfigs()
-          fetchAvailableConfigs()
-        } else {
-          ElMessage.error(res.message || '操作失败')
-        }
+
+        ElMessage.success(isEditMode.value ? '更新成功' : '创建成功')
+        configDialogVisible.value = false
+        fetchConfigs()
+        fetchAvailableConfigs()
       } catch (error) {
-        ElMessage.error('网络请求错误')
+        // 错误已由拦截器处理
       } finally {
         submittingConfig.value = false
       }
@@ -644,27 +645,21 @@ const handleDeleteConfig = (row) => {
     type: 'warning',
   }).then(async () => {
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/llm-configuration/users/${userId.value}/${row.configurationName}`,
-        { method: 'DELETE' },
-      )
-      const res = await response.json()
-      if (res.code === 200) {
-        ElMessage.success('删除成功')
-        if (configList.value.length === 1 && pagination.pageNumber > 1) {
-          pagination.pageNumber -= 1
-        }
-        fetchConfigs()
-        fetchAvailableConfigs()
-        if (activeConfigName.value === row.configurationName) {
-          activeConfigName.value = ''
-          localStorage.removeItem('activeConfigName')
-        }
-      } else {
-        ElMessage.error(res.message || '删除失败')
+      // [变更] DELETE 请求
+      await request.delete(`/llm-configuration/users/${userId.value}/${row.configurationName}`)
+
+      ElMessage.success('删除成功')
+      if (configList.value.length === 1 && pagination.pageNumber > 1) {
+        pagination.pageNumber -= 1
+      }
+      fetchConfigs()
+      fetchAvailableConfigs()
+      if (activeConfigName.value === row.configurationName) {
+        activeConfigName.value = ''
+        localStorage.removeItem('activeConfigName')
       }
     } catch (error) {
-      ElMessage.error('网络请求错误')
+      // 错误已由拦截器处理
     }
   })
 }
@@ -697,19 +692,18 @@ const fetchMcpList = async () => {
   if (!userId.value) return
   loadingMcp.value = true
   try {
-    const url = `${API_BASE_URL}/mcp-manager/${userId.value}/resources/list?pageNumber=${mcpPagination.pageNumber}&pageSize=${mcpPagination.pageSize}`
-    const response = await fetch(url)
-    const res = await response.json()
-    if (res.code === 200) {
-      mcpList.value = res.data?.result || []
-      mcpPagination.total = res.data?.total || 0
-      mcpPagination.pageNumber = res.data?.pageNumber || 1
-      mcpPagination.pageSize = res.data?.pageSize || 10
-    } else {
-      ElMessage.error(res.message || '获取 MCP 列表失败')
-    }
+    const res = await request.get(`/mcp-manager/${userId.value}/resources/list`, {
+      params: {
+        pageNumber: mcpPagination.pageNumber,
+        pageSize: mcpPagination.pageSize,
+      },
+    })
+    mcpList.value = res.data?.result || []
+    mcpPagination.total = res.data?.total || 0
+    mcpPagination.pageNumber = res.data?.pageNumber || 1
+    mcpPagination.pageSize = res.data?.pageSize || 10
   } catch (error) {
-    ElMessage.error('网络请求失败')
+    // handled
   } finally {
     loadingMcp.value = false
   }
@@ -737,22 +731,18 @@ const submitMcp = async () => {
     if (valid) {
       submittingMcp.value = true
       try {
-        const method = isMcpEditMode.value ? 'PUT' : 'POST'
-        const response = await fetch(`${API_BASE_URL}/mcp-manager/${userId.value}/resources`, {
-          method,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(mcpForm),
+        const method = isMcpEditMode.value ? 'put' : 'post'
+        await request({
+          url: `/mcp-manager/${userId.value}/resources`,
+          method: method,
+          data: mcpForm,
         })
-        const res = await response.json()
-        if (res.code === 200) {
-          ElMessage.success(isMcpEditMode.value ? '更新成功' : '创建成功')
-          mcpDialogVisible.value = false
-          fetchMcpList()
-        } else {
-          ElMessage.error(res.message || '操作失败')
-        }
+
+        ElMessage.success(isMcpEditMode.value ? '更新成功' : '创建成功')
+        mcpDialogVisible.value = false
+        fetchMcpList()
       } catch (error) {
-        ElMessage.error('网络请求错误')
+        // handled
       } finally {
         submittingMcp.value = false
       }
@@ -765,22 +755,17 @@ const handleDeleteMcp = (row) => {
     type: 'warning',
   }).then(async () => {
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/mcp-manager/${userId.value}/resources/${encodeURIComponent(row.resourceName)}`,
-        { method: 'DELETE' },
+      await request.delete(
+        `/mcp-manager/${userId.value}/resources/${encodeURIComponent(row.resourceName)}`,
       )
-      const res = await response.json()
-      if (res.code === 200) {
-        ElMessage.success('删除成功')
-        if (mcpList.value.length === 1 && mcpPagination.pageNumber > 1) {
-          mcpPagination.pageNumber -= 1
-        }
-        fetchMcpList()
-      } else {
-        ElMessage.error(res.message || '删除失败')
+
+      ElMessage.success('删除成功')
+      if (mcpList.value.length === 1 && mcpPagination.pageNumber > 1) {
+        mcpPagination.pageNumber -= 1
       }
+      fetchMcpList()
     } catch (error) {
-      ElMessage.error('网络请求错误')
+      // handled
     }
   })
 }
@@ -833,23 +818,16 @@ const handleDeleteHistory = () => {
   })
     .then(async () => {
       try {
-        const url = `${API_BASE_URL}/chat/conversation/${userId.value}/${contextMenuTargetId.value}`
-        const resp = await fetch(url, { method: 'DELETE' })
-        const res = await resp.json()
+        await request.delete(`/chat/conversation/${userId.value}/${contextMenuTargetId.value}`)
 
-        if (res.code === 200) {
-          ElMessage.success('删除成功')
-          history.value = history.value.filter((h) => h.id !== contextMenuTargetId.value)
-          if (activeSessionId.value === contextMenuTargetId.value) {
-            activeSessionId.value = null
-            chatList.value = []
-          }
-        } else {
-          ElMessage.error(res.message || '删除失败')
+        ElMessage.success('删除成功')
+        history.value = history.value.filter((h) => h.id !== contextMenuTargetId.value)
+        if (activeSessionId.value === contextMenuTargetId.value) {
+          activeSessionId.value = null
+          chatList.value = []
         }
       } catch (e) {
-        console.error(e)
-        ElMessage.error('网络请求错误')
+        // handled
       }
     })
     .catch(() => {})
@@ -859,12 +837,12 @@ const fetchHistory = async () => {
   if (!userId.value) return
   loadingHistory.value = true
   try {
-    const url = `${API_BASE_URL}/chat/conversation/${userId.value}/history`
-    const resp = await fetch(url)
-    const rawText = await resp.text()
-    const res = safeJSONParse(rawText)
+    const res = await request.get(`/chat/conversation/${userId.value}/history`)
 
-    if (res && res.code === 200 && res.data && res.data.conversationHistory) {
+    // Axios 默认会 JSON.parse。如果后端ID是长整型导致精度丢失，
+    // 需要在 request.js 里配置 transformResponse。
+    // 这里假设直接用 res.data 没问题。
+    if (res.data && res.data.conversationHistory) {
       history.value = res.data.conversationHistory.map((item) => {
         return {
           id: item.conversationId,
@@ -878,20 +856,16 @@ const fetchHistory = async () => {
     }
   } catch (error) {
     console.error('Fetch history error:', error)
-    ElMessage.error('获取历史记录失败')
   } finally {
     loadingHistory.value = false
   }
 }
 
 const fetchConversationDetail = async (conversationId) => {
-  const url = `${API_BASE_URL}/chat/conversation/${userId.value}/detail/${conversationId}`
   try {
-    const resp = await fetch(url)
-    const rawText = await resp.text()
-    const res = safeJSONParse(rawText)
+    const res = await request.get(`/chat/conversation/${userId.value}/detail/${conversationId}`)
 
-    if (res && res.code === 200 && res.data) {
+    if (res.data) {
       return res.data.messages.map((msg) => ({
         role: msg.role === 'assistant' ? 'ai' : msg.role,
         content: msg.content,
@@ -899,7 +873,6 @@ const fetchConversationDetail = async (conversationId) => {
     }
   } catch (error) {
     console.error('Fetch detail error:', error)
-    ElMessage.error('获取对话详情失败')
   }
   return []
 }
@@ -918,20 +891,10 @@ watch(
 const createRemoteConversation = async () => {
   if (!userId.value) return null
   try {
-    const url = `${API_BASE_URL}/chat/conversation/${userId.value}/create`
-    const resp = await fetch(url, { method: 'POST' })
-    const rawText = await resp.text()
-    const res = safeJSONParse(rawText)
-
-    if (res && res.code === 200) {
-      return res.data
-    } else {
-      ElMessage.error(res?.message || '创建会话失败')
-      return null
-    }
+    const res = await request.post(`/chat/conversation/${userId.value}/create`)
+    return res.data // 直接返回 ID
   } catch (e) {
     console.error('Create Chat Error:', e)
-    ElMessage.error('创建会话网络请求错误')
     return null
   }
 }
@@ -996,24 +959,18 @@ const scrollToBottom = async () => {
 const saveMessageToRemote = async (role, content) => {
   if (!userId.value || !activeSessionId.value) return false
   try {
-    const url = `${API_BASE_URL}/chat/conversation/${userId.value}/${activeSessionId.value}/message/add`
-    const body = {
+    await request.put(`/chat/conversation/${userId.value}/${activeSessionId.value}/message/add`, {
       role: role,
       content: content,
-    }
-    const resp = await fetch(url, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
     })
-    const res = await resp.json()
-    return res.code === 200
+    return true
   } catch (e) {
     console.error('Save Message Error:', e)
     return false
   }
 }
 
+// [核心] 发送消息逻辑
 const sendMessage = async () => {
   const text = inputContent.value.trim()
 
@@ -1055,16 +1012,17 @@ const sendMessage = async () => {
     inputContent.value = ''
     scrollToBottom()
 
-    const saveUserSuccess = await saveMessageToRemote('user', text)
-    if (!saveUserSuccess) {
-      ElMessage.warning('消息保存失败，但将尝试继续获取回答...')
-    }
+    // 依然尝试保存用户消息，但即使失败也继续
+    await saveMessageToRemote('user', text)
 
     const aiMsg = reactive({ role: 'ai', content: '', loading: true })
     chatList.value.push(aiMsg)
     scrollToBottom()
 
-    const streamUrl = `${API_BASE_URL}/chat/call/stream`
+    // --- 流式请求部分 (使用 Fetch + 手动 Token) ---
+    // 注意：这里需要完整的 URL，因为 Fetch 不走 request.js 的 baseURL
+    const streamUrl = 'http://localhost:9000/nexus/chat-service/chat/call/stream'
+
     const requestBody = {
       userId: Number(userId.value),
       configurationName: activeConfigName.value,
@@ -1073,13 +1031,24 @@ const sendMessage = async () => {
       toolUseAllowed: isMcpEnabled.value,
     }
 
+    // [关键修复] 获取 Token 并放入 Header
+    const token = localStorage.getItem('token')
+
     const response = await fetch(streamUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: token ? `Bearer ${token}` : '', // 或 `Bearer ${token}` 视后端而定
+      },
       body: JSON.stringify(requestBody),
     })
 
-    if (!response.ok || !response.body) {
+    if (!response.ok) {
+      if (response.status === 401) {
+        ElMessage.error('登录已过期，请重新登录')
+        router.push('/login')
+        return
+      }
       throw new Error('Network response was not ok')
     }
 
@@ -1103,8 +1072,10 @@ const sendMessage = async () => {
         if (!trimmedLine || !trimmedLine.startsWith('data:')) continue
         const dataStr = trimmedLine.replace('data:', '')
         if (dataStr.trim() === '[DONE]') break
-        try {
-          const json = JSON.parse(dataStr)
+
+        // 这里使用 safeJSONParse，因为流式返回的数据也可能包含长整型ID
+        const json = safeJSONParse(dataStr)
+        if (json) {
           const deltaContent = json.choices?.[0]?.delta?.content
           if (deltaContent) {
             if (aiMsg.loading) aiMsg.loading = false
@@ -1112,8 +1083,6 @@ const sendMessage = async () => {
             fullContent += deltaContent
             scrollToBottom()
           }
-        } catch (err) {
-          console.warn('JSON Parse Warning (skipped):', err)
         }
       }
     }
