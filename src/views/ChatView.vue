@@ -441,7 +441,7 @@ import {
   Plus,
   Delete,
   Connection,
-  Close, // [新增]
+  Close,
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
@@ -777,7 +777,7 @@ const history = ref([])
 const loadingHistory = ref(false)
 const loadingMessages = ref(false)
 
-// [新增] 图片上传相关状态
+// 图片上传相关状态
 const uploadedImages = ref([])
 const isUploadingImage = ref(false)
 
@@ -908,7 +908,7 @@ const startNewChat = async () => {
     activeSessionId.value = newId
     chatList.value = newSession.messages
     currentView.value = 'chat'
-    uploadedImages.value = [] // 切换对话清空待发送图片
+    uploadedImages.value = []
   }
 
   creatingChat.value = false
@@ -917,7 +917,7 @@ const startNewChat = async () => {
 const selectHistory = async (id) => {
   currentView.value = 'chat'
   activeSessionId.value = id
-  uploadedImages.value = [] // 切换对话清空待发送图片
+  uploadedImages.value = []
 
   const targetSession = history.value.find((item) => item.id === id)
   if (!targetSession) return
@@ -949,12 +949,14 @@ const scrollToBottom = async () => {
   }
 }
 
-const saveMessageToRemote = async (role, content) => {
+// [修改] 增加 imageUrls 参数，默认值为空数组
+const saveMessageToRemote = async (role, content, imageUrls = []) => {
   if (!userId.value || !activeSessionId.value) return false
   try {
     await request.put(`/chat/conversation/${userId.value}/${activeSessionId.value}/message/add`, {
       role: role,
       content: content,
+      imageUrls: imageUrls, // [修改] 传递图片列表给后端
     })
     return true
   } catch (e) {
@@ -963,16 +965,14 @@ const saveMessageToRemote = async (role, content) => {
   }
 }
 
-// ==================== [新增] 图片上传逻辑 ====================
+// ==================== 图片上传逻辑 ====================
 
-// 处理粘贴事件
 const handlePaste = async (event) => {
   const items = (event.clipboardData || event.originalEvent.clipboardData).items
 
   for (let index in items) {
     const item = items[index]
     if (item.kind === 'file' && item.type.indexOf('image/') !== -1) {
-      // 阻止默认粘贴（避免输入框出现乱码）
       event.preventDefault()
       const blob = item.getAsFile()
       uploadImage(blob)
@@ -980,13 +980,11 @@ const handlePaste = async (event) => {
   }
 }
 
-// 执行图片上传
 const uploadImage = async (file) => {
   if (!file) return
   isUploadingImage.value = true
 
   const formData = new FormData()
-  // 通常 key 是 file，如果后端需要其他 key 请修改
   formData.append('file', file)
 
   try {
@@ -996,7 +994,6 @@ const uploadImage = async (file) => {
       },
     })
 
-    // 假设 res.data 是图片 URL
     if (res.data) {
       uploadedImages.value.push(res.data)
       ElMessage.success('图片上传成功')
@@ -1009,14 +1006,12 @@ const uploadImage = async (file) => {
   }
 }
 
-// 移除已上传的图片
 const removeImage = (index) => {
   uploadedImages.value.splice(index, 1)
 }
 
-// ==================== 发送消息逻辑 (修改) ====================
+// ==================== 发送消息逻辑 ====================
 const sendMessage = async () => {
-  // 允许纯文本，或者有图片的情况下发送（如果允许仅发图不发文，可适当调整判断）
   const text = inputContent.value.trim()
   const hasImages = uploadedImages.value.length > 0
 
@@ -1028,7 +1023,6 @@ const sendMessage = async () => {
   }
 
   isSending.value = true
-  // 暂存当前的图片列表，以便发送后清空
   const currentImages = [...uploadedImages.value]
 
   try {
@@ -1049,10 +1043,18 @@ const sendMessage = async () => {
       chatList.value = newSession.messages
     }
 
-    // 在界面显示用户消息
-    // 注意：如果你的 chatList 显示需要支持显示图片，你需要修改 message-row 的结构
-    // 这里简单地将文本作为消息内容。如果需要历史记录也存图片，后端接口也需要支持。
-    const userMsg = { role: 'user', content: text }
+    // [修改] 构造显示内容：如果包含图片，转换为 Markdown 图片语法拼接在文本后
+    // 这样用户发送后，界面上能立即看到图片预览
+    let displayContent = text
+    if (currentImages.length > 0) {
+      // 将每个图片 URL 转换为 ![]() 格式
+      const imageMarkdown = currentImages.map((url) => `![](${url})`).join('\n')
+      // 如果有文本，先换行；否则直接放图片
+      displayContent = displayContent ? `${displayContent}\n${imageMarkdown}` : imageMarkdown
+    }
+
+    // 在界面显示用户消息 (使用拼接后的内容)
+    const userMsg = { role: 'user', content: displayContent }
     chatList.value.push(userMsg)
 
     const currentHistoryItem = history.value.find((h) => h.id === activeSessionId.value)
@@ -1068,15 +1070,16 @@ const sendMessage = async () => {
     uploadedImages.value = []
     scrollToBottom()
 
-    // 依然尝试保存用户文本消息
-    if (text) {
-      await saveMessageToRemote('user', text)
+    // [修改] 调用保存接口：传入纯文本 text 和图片列表 currentImages
+    if (text || currentImages.length > 0) {
+      await saveMessageToRemote('user', text, currentImages)
     }
 
     const aiMsg = reactive({ role: 'ai', content: '', loading: true })
     chatList.value.push(aiMsg)
     scrollToBottom()
 
+    // 流式请求配置
     const streamUrl = 'http://localhost:9000/nexus/chat-service/chat/call/stream'
 
     const requestBody = {
@@ -1085,7 +1088,7 @@ const sendMessage = async () => {
       conversationId: activeSessionId.value,
       userQuestion: text,
       toolUseAllowed: isMcpEnabled.value,
-      imageUrls: currentImages, // [修改] 填入图片 URL
+      imageUrls: currentImages, // 保持传递图片 URL 给 LLM
     }
 
     const token = localStorage.getItem('token')
@@ -1144,6 +1147,7 @@ const sendMessage = async () => {
 
     aiMsg.loading = false
     if (fullContent) {
+      // AI 回复暂时通常没有图片，或者如果有也是 Markdown 格式，这里维持原样
       await saveMessageToRemote('assistant', fullContent)
     }
   } catch (e) {
@@ -1156,7 +1160,7 @@ const sendMessage = async () => {
         lastMsg.content = '（请求出错）'
       }
     }
-    // 发送失败恢复图片（可选）
+    // 发送失败恢复图片
     uploadedImages.value = currentImages
   } finally {
     isSending.value = false
