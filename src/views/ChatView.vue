@@ -356,13 +356,26 @@
 
         <div class="footer-input-area">
           <div class="input-box">
+            <div v-if="uploadedImages.length > 0 || isUploadingImage" class="image-preview-area">
+              <div v-for="(img, idx) in uploadedImages" :key="idx" class="preview-item">
+                <img :src="img" alt="uploaded" />
+                <div class="delete-btn" @click="removeImage(idx)">
+                  <el-icon><Close /></el-icon>
+                </div>
+              </div>
+              <div v-if="isUploadingImage" class="preview-item uploading">
+                <el-icon class="is-loading"><Loading /></el-icon>
+              </div>
+            </div>
+
             <el-input
               type="textarea"
-              placeholder="请输入内容..."
+              placeholder="请输入内容 (支持粘贴图片)..."
               v-model="inputContent"
               :autosize="{ minRows: 2, maxRows: 4 }"
               class="chat-input"
               @keydown.enter.prevent="sendMessage"
+              @paste="handlePaste"
             />
             <div class="input-footer">
               <div class="left-tools"></div>
@@ -382,7 +395,11 @@
                   type="primary"
                   class="send-btn"
                   @click="sendMessage"
-                  :disabled="!inputContent.trim() || isSending"
+                  :disabled="
+                    (!inputContent.trim() && uploadedImages.length === 0) ||
+                    isSending ||
+                    isUploadingImage
+                  "
                 >
                   <el-icon :class="{ 'is-loading': isSending }">
                     <Loading v-if="isSending" />
@@ -424,6 +441,7 @@ import {
   Plus,
   Delete,
   Connection,
+  Close, // [新增]
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
@@ -432,7 +450,7 @@ import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/atom-one-dark.css'
 
-// [核心变更] 引入封装好的 Axios 实例
+// [核心] 引入封装好的 Axios 实例
 import request from '@/utils/request'
 
 const router = useRouter()
@@ -460,7 +478,6 @@ const renderMarkdown = (text) => {
   return md.render(text)
 }
 
-// 依然保留此函数，用于处理流式响应中的 JSON 块
 const safeJSONParse = (text) => {
   try {
     const patchedText = text.replace(/":\s*(\d{16,})/g, '": "$1"')
@@ -474,8 +491,6 @@ const safeJSONParse = (text) => {
 const username = ref('加载中...')
 const email = ref('')
 const userId = ref(null)
-
-// MCP 激活状态
 const isMcpEnabled = ref(false)
 
 const loadUserInfo = () => {
@@ -511,9 +526,7 @@ const fetchAvailableConfigs = async () => {
   if (!userId.value) return
   configSelectLoading.value = true
   try {
-    // [变更] 使用 request.get，自动拦截处理 Header 和 URL
     const res = await request.get(`/llm-configuration/users/${userId.value}/configurations`)
-    // request 拦截器已经处理了 code!=200 的情况，这里 res 就是后端返回的完整对象
     if (Array.isArray(res.data)) {
       availableConfigs.value = res.data
       const saved = localStorage.getItem('activeConfigName')
@@ -574,22 +587,17 @@ const fetchConfigs = async () => {
   if (!userId.value) return
   loadingConfigs.value = true
   try {
-    // [变更] 使用 params 传递查询参数
     const res = await request.get(`/llm-configuration/users/${userId.value}`, {
       params: {
         pageNumber: pagination.pageNumber,
         pageSize: pagination.pageSize,
       },
     })
-
-    // 假设你的 request.js 返回的是 res.data (result/pageNumber等在 data 下)
-    // 根据你的后端结构调整这里，这里假设 res.data 包含 result, total 等
     configList.value = res.data?.result || []
     pagination.total = res.data?.total || 0
     pagination.pageNumber = res.data?.pageNumber || 1
     pagination.pageSize = res.data?.pageSize || 10
   } catch (error) {
-    // 错误已由拦截器处理
   } finally {
     loadingConfigs.value = false
   }
@@ -620,19 +628,16 @@ const submitConfig = async () => {
       submittingConfig.value = true
       try {
         const method = isEditMode.value ? 'put' : 'post'
-        // [变更] Axios 自动处理 method 和 body (data)
         await request({
           url: `/llm-configuration/users/${userId.value}`,
           method: method,
           data: configForm,
         })
-
         ElMessage.success(isEditMode.value ? '更新成功' : '创建成功')
         configDialogVisible.value = false
         fetchConfigs()
         fetchAvailableConfigs()
       } catch (error) {
-        // 错误已由拦截器处理
       } finally {
         submittingConfig.value = false
       }
@@ -645,9 +650,7 @@ const handleDeleteConfig = (row) => {
     type: 'warning',
   }).then(async () => {
     try {
-      // [变更] DELETE 请求
       await request.delete(`/llm-configuration/users/${userId.value}/${row.configurationName}`)
-
       ElMessage.success('删除成功')
       if (configList.value.length === 1 && pagination.pageNumber > 1) {
         pagination.pageNumber -= 1
@@ -658,9 +661,7 @@ const handleDeleteConfig = (row) => {
         activeConfigName.value = ''
         localStorage.removeItem('activeConfigName')
       }
-    } catch (error) {
-      // 错误已由拦截器处理
-    }
+    } catch (error) {}
   })
 }
 
@@ -703,7 +704,6 @@ const fetchMcpList = async () => {
     mcpPagination.pageNumber = res.data?.pageNumber || 1
     mcpPagination.pageSize = res.data?.pageSize || 10
   } catch (error) {
-    // handled
   } finally {
     loadingMcp.value = false
   }
@@ -737,12 +737,10 @@ const submitMcp = async () => {
           method: method,
           data: mcpForm,
         })
-
         ElMessage.success(isMcpEditMode.value ? '更新成功' : '创建成功')
         mcpDialogVisible.value = false
         fetchMcpList()
       } catch (error) {
-        // handled
       } finally {
         submittingMcp.value = false
       }
@@ -758,15 +756,12 @@ const handleDeleteMcp = (row) => {
       await request.delete(
         `/mcp-manager/${userId.value}/resources/${encodeURIComponent(row.resourceName)}`,
       )
-
       ElMessage.success('删除成功')
       if (mcpList.value.length === 1 && mcpPagination.pageNumber > 1) {
         mcpPagination.pageNumber -= 1
       }
       fetchMcpList()
-    } catch (error) {
-      // handled
-    }
+    } catch (error) {}
   })
 }
 
@@ -781,6 +776,10 @@ const chatList = ref([])
 const history = ref([])
 const loadingHistory = ref(false)
 const loadingMessages = ref(false)
+
+// [新增] 图片上传相关状态
+const uploadedImages = ref([])
+const isUploadingImage = ref(false)
 
 const contextMenuVisible = ref(false)
 const contextMenuX = ref(0)
@@ -819,16 +818,13 @@ const handleDeleteHistory = () => {
     .then(async () => {
       try {
         await request.delete(`/chat/conversation/${userId.value}/${contextMenuTargetId.value}`)
-
         ElMessage.success('删除成功')
         history.value = history.value.filter((h) => h.id !== contextMenuTargetId.value)
         if (activeSessionId.value === contextMenuTargetId.value) {
           activeSessionId.value = null
           chatList.value = []
         }
-      } catch (e) {
-        // handled
-      }
+      } catch (e) {}
     })
     .catch(() => {})
 }
@@ -838,10 +834,6 @@ const fetchHistory = async () => {
   loadingHistory.value = true
   try {
     const res = await request.get(`/chat/conversation/${userId.value}/history`)
-
-    // Axios 默认会 JSON.parse。如果后端ID是长整型导致精度丢失，
-    // 需要在 request.js 里配置 transformResponse。
-    // 这里假设直接用 res.data 没问题。
     if (res.data && res.data.conversationHistory) {
       history.value = res.data.conversationHistory.map((item) => {
         return {
@@ -864,7 +856,6 @@ const fetchHistory = async () => {
 const fetchConversationDetail = async (conversationId) => {
   try {
     const res = await request.get(`/chat/conversation/${userId.value}/detail/${conversationId}`)
-
     if (res.data) {
       return res.data.messages.map((msg) => ({
         role: msg.role === 'assistant' ? 'ai' : msg.role,
@@ -892,7 +883,7 @@ const createRemoteConversation = async () => {
   if (!userId.value) return null
   try {
     const res = await request.post(`/chat/conversation/${userId.value}/create`)
-    return res.data // 直接返回 ID
+    return res.data
   } catch (e) {
     console.error('Create Chat Error:', e)
     return null
@@ -917,6 +908,7 @@ const startNewChat = async () => {
     activeSessionId.value = newId
     chatList.value = newSession.messages
     currentView.value = 'chat'
+    uploadedImages.value = [] // 切换对话清空待发送图片
   }
 
   creatingChat.value = false
@@ -925,6 +917,7 @@ const startNewChat = async () => {
 const selectHistory = async (id) => {
   currentView.value = 'chat'
   activeSessionId.value = id
+  uploadedImages.value = [] // 切换对话清空待发送图片
 
   const targetSession = history.value.find((item) => item.id === id)
   if (!targetSession) return
@@ -970,17 +963,73 @@ const saveMessageToRemote = async (role, content) => {
   }
 }
 
-// [核心] 发送消息逻辑
-const sendMessage = async () => {
-  const text = inputContent.value.trim()
+// ==================== [新增] 图片上传逻辑 ====================
 
-  if (!text || isSending.value) return
+// 处理粘贴事件
+const handlePaste = async (event) => {
+  const items = (event.clipboardData || event.originalEvent.clipboardData).items
+
+  for (let index in items) {
+    const item = items[index]
+    if (item.kind === 'file' && item.type.indexOf('image/') !== -1) {
+      // 阻止默认粘贴（避免输入框出现乱码）
+      event.preventDefault()
+      const blob = item.getAsFile()
+      uploadImage(blob)
+    }
+  }
+}
+
+// 执行图片上传
+const uploadImage = async (file) => {
+  if (!file) return
+  isUploadingImage.value = true
+
+  const formData = new FormData()
+  // 通常 key 是 file，如果后端需要其他 key 请修改
+  formData.append('file', file)
+
+  try {
+    const res = await request.post('/chat/image/upload-single', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+
+    // 假设 res.data 是图片 URL
+    if (res.data) {
+      uploadedImages.value.push(res.data)
+      ElMessage.success('图片上传成功')
+    }
+  } catch (e) {
+    console.error('Upload Image Error:', e)
+    ElMessage.error('图片上传失败')
+  } finally {
+    isUploadingImage.value = false
+  }
+}
+
+// 移除已上传的图片
+const removeImage = (index) => {
+  uploadedImages.value.splice(index, 1)
+}
+
+// ==================== 发送消息逻辑 (修改) ====================
+const sendMessage = async () => {
+  // 允许纯文本，或者有图片的情况下发送（如果允许仅发图不发文，可适当调整判断）
+  const text = inputContent.value.trim()
+  const hasImages = uploadedImages.value.length > 0
+
+  if ((!text && !hasImages) || isSending.value || isUploadingImage.value) return
+
   if (!activeConfigName.value) {
     ElMessage.warning('请先在左侧配置管理或下拉框中选择一个对话模型配置')
     return
   }
 
   isSending.value = true
+  // 暂存当前的图片列表，以便发送后清空
+  const currentImages = [...uploadedImages.value]
 
   try {
     if (!activeSessionId.value) {
@@ -991,7 +1040,7 @@ const sendMessage = async () => {
       }
       const newSession = {
         id: newId,
-        title: text.length > 10 ? text.substring(0, 10) + '...' : text,
+        title: text.length > 10 ? text.substring(0, 10) + '...' : text || '图片对话',
         messages: [],
         loaded: true,
       }
@@ -1000,27 +1049,34 @@ const sendMessage = async () => {
       chatList.value = newSession.messages
     }
 
+    // 在界面显示用户消息
+    // 注意：如果你的 chatList 显示需要支持显示图片，你需要修改 message-row 的结构
+    // 这里简单地将文本作为消息内容。如果需要历史记录也存图片，后端接口也需要支持。
     const userMsg = { role: 'user', content: text }
     chatList.value.push(userMsg)
 
     const currentHistoryItem = history.value.find((h) => h.id === activeSessionId.value)
     if (currentHistoryItem) {
       if (currentHistoryItem.title === '空白对话' || currentHistoryItem.title === '新对话') {
-        currentHistoryItem.title = text.length > 10 ? text.substring(0, 10) + '...' : text
+        currentHistoryItem.title =
+          text.length > 10 ? text.substring(0, 10) + '...' : text || '图片对话'
       }
     }
+
+    // 清空输入框和图片列表
     inputContent.value = ''
+    uploadedImages.value = []
     scrollToBottom()
 
-    // 依然尝试保存用户消息，但即使失败也继续
-    await saveMessageToRemote('user', text)
+    // 依然尝试保存用户文本消息
+    if (text) {
+      await saveMessageToRemote('user', text)
+    }
 
     const aiMsg = reactive({ role: 'ai', content: '', loading: true })
     chatList.value.push(aiMsg)
     scrollToBottom()
 
-    // --- 流式请求部分 (使用 Fetch + 手动 Token) ---
-    // 注意：这里需要完整的 URL，因为 Fetch 不走 request.js 的 baseURL
     const streamUrl = 'http://localhost:9000/nexus/chat-service/chat/call/stream'
 
     const requestBody = {
@@ -1029,16 +1085,16 @@ const sendMessage = async () => {
       conversationId: activeSessionId.value,
       userQuestion: text,
       toolUseAllowed: isMcpEnabled.value,
+      imageUrls: currentImages, // [修改] 填入图片 URL
     }
 
-    // [关键修复] 获取 Token 并放入 Header
     const token = localStorage.getItem('token')
 
     const response = await fetch(streamUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: token ? `Bearer ${token}` : '', // 或 `Bearer ${token}` 视后端而定
+        Authorization: token ? `Bearer ${token}` : '',
       },
       body: JSON.stringify(requestBody),
     })
@@ -1073,7 +1129,6 @@ const sendMessage = async () => {
         const dataStr = trimmedLine.replace('data:', '')
         if (dataStr.trim() === '[DONE]') break
 
-        // 这里使用 safeJSONParse，因为流式返回的数据也可能包含长整型ID
         const json = safeJSONParse(dataStr)
         if (json) {
           const deltaContent = json.choices?.[0]?.delta?.content
@@ -1101,6 +1156,8 @@ const sendMessage = async () => {
         lastMsg.content = '（请求出错）'
       }
     }
+    // 发送失败恢复图片（可选）
+    uploadedImages.value = currentImages
   } finally {
     isSending.value = false
     scrollToBottom()
@@ -1123,7 +1180,63 @@ const logout = () => {
 </script>
 
 <style scoped>
-/* 保持原有样式不变 */
+/* 保持原有样式不变，下面是新增的样式 */
+
+/* ... (原有样式省略) ... */
+
+/* [新增] 图片预览区域样式 */
+.image-preview-area {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-bottom: 10px;
+  margin-bottom: 5px;
+  border-bottom: 1px dashed #eee;
+}
+
+.preview-item {
+  position: relative;
+  width: 60px;
+  height: 60px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #ddd;
+}
+
+.preview-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.preview-item.uploading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8f8f9;
+  color: #999;
+}
+
+.delete-btn {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 12px;
+  border-bottom-left-radius: 4px;
+}
+.delete-btn:hover {
+  background: rgba(255, 0, 0, 0.7);
+}
+
+/* 保持原有样式的剩余部分 */
 .context-menu {
   position: fixed;
   z-index: 9999;
@@ -1459,13 +1572,11 @@ const logout = () => {
   color: #fff;
   border-radius: 12px 0 12px 12px;
 }
-/* 给用户侧的消息也加上基本的 pre-wrap，防止用户输入的换行丢失，但不解析 md */
 .msg-right .msg-bubble .markdown-body {
   white-space: pre-wrap;
 }
 
 .msg-bubble {
-  /* 核心修复：设置宽度为内容适应，防止过宽 */
   width: fit-content;
   max-width: 100%;
 
@@ -1474,7 +1585,6 @@ const logout = () => {
   line-height: 1.6;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.03);
   word-break: break-word;
-  /* 移除 overflow-x: auto，交由内部代码块处理，防止气泡意外出现滚动条 */
 }
 
 .ai-avatar {
@@ -1572,14 +1682,12 @@ const logout = () => {
   }
 }
 
-/* --- Markdown Styles (Github style + Dark mode for code) --- */
 :deep(.markdown-body) {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
   font-size: 15px;
   line-height: 1.6;
 }
 
-/* 移除 Markdown 首尾元素的 margin，防止气泡内部留白过大 */
 :deep(.markdown-body > *:first-child) {
   margin-top: 0;
 }
@@ -1648,7 +1756,7 @@ const logout = () => {
 /* Code Blocks (Pre) */
 :deep(.markdown-body pre) {
   padding: 12px;
-  overflow: auto; /* 代码块内部滚动 */
+  overflow: auto;
   font-size: 85%;
   line-height: 1.45;
   background-color: #282c34;
@@ -1670,7 +1778,7 @@ const logout = () => {
 :deep(.markdown-body table) {
   display: block;
   width: 100%;
-  overflow: auto; /* 表格内部滚动 */
+  overflow: auto;
   margin-bottom: 10px;
   border-collapse: collapse;
 }
@@ -1699,7 +1807,6 @@ const logout = () => {
 .msg-right :deep(.markdown-body) {
   color: #fff;
 }
-/* 用户侧的代码块 */
 .msg-right :deep(.markdown-body code) {
   color: #333;
   background-color: rgba(255, 255, 255, 0.8);
