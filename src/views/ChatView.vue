@@ -445,17 +445,14 @@ import {
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
-// --- Markdown 相关引入 ---
 import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/atom-one-dark.css'
 
-// [核心] 引入封装好的 Axios 实例
 import request from '@/utils/request'
 
 const router = useRouter()
 
-// --- Markdown 配置 ---
 const md = new MarkdownIt({
   html: false,
   linkify: true,
@@ -551,7 +548,6 @@ const handleConfigChange = (val) => {
   }
 }
 
-// ==================== 配置管理 ====================
 const configList = ref([])
 const loadingConfigs = ref(false)
 const pagination = reactive({
@@ -665,7 +661,6 @@ const handleDeleteConfig = (row) => {
   })
 }
 
-// ==================== MCP 资源管理 ====================
 const mcpList = ref([])
 const loadingMcp = ref(false)
 const mcpPagination = reactive({
@@ -765,7 +760,6 @@ const handleDeleteMcp = (row) => {
   })
 }
 
-// ==================== 聊天与历史记录 ====================
 const activeSessionId = ref(null)
 const inputContent = ref('')
 const isSending = ref(false)
@@ -777,7 +771,6 @@ const history = ref([])
 const loadingHistory = ref(false)
 const loadingMessages = ref(false)
 
-// 图片上传相关状态
 const uploadedImages = ref([])
 const isUploadingImage = ref(false)
 
@@ -856,11 +849,20 @@ const fetchHistory = async () => {
 const fetchConversationDetail = async (conversationId) => {
   try {
     const res = await request.get(`/chat/conversation/${userId.value}/detail/${conversationId}`)
-    if (res.data) {
-      return res.data.messages.map((msg) => ({
-        role: msg.role === 'assistant' ? 'ai' : msg.role,
-        content: msg.content,
-      }))
+    if (res.data && res.data.messages) {
+      return res.data.messages.map((msg) => {
+        let content = msg.content || ''
+        // 如果存在 urls 且不为空，拼接成 Markdown 图片格式
+        if (msg.urls && Array.isArray(msg.urls) && msg.urls.length > 0) {
+          const imagesMd = msg.urls.map((url) => `![](${url})`).join('\n')
+          // 如果原有内容不为空，先换行再接图片；否则直接展示图片
+          content = content ? `${content}\n\n${imagesMd}` : imagesMd
+        }
+        return {
+          role: msg.role === 'assistant' ? 'ai' : msg.role,
+          content: content,
+        }
+      })
     }
   } catch (error) {
     console.error('Fetch detail error:', error)
@@ -949,14 +951,13 @@ const scrollToBottom = async () => {
   }
 }
 
-// [修改] 增加 imageUrls 参数，默认值为空数组
 const saveMessageToRemote = async (role, content, imageUrls = []) => {
   if (!userId.value || !activeSessionId.value) return false
   try {
     await request.put(`/chat/conversation/${userId.value}/${activeSessionId.value}/message/add`, {
       role: role,
       content: content,
-      imageUrls: imageUrls, // [修改] 传递图片列表给后端
+      imageUrls: imageUrls,
     })
     return true
   } catch (e) {
@@ -964,8 +965,6 @@ const saveMessageToRemote = async (role, content, imageUrls = []) => {
     return false
   }
 }
-
-// ==================== 图片上传逻辑 ====================
 
 const handlePaste = async (event) => {
   const items = (event.clipboardData || event.originalEvent.clipboardData).items
@@ -1010,7 +1009,6 @@ const removeImage = (index) => {
   uploadedImages.value.splice(index, 1)
 }
 
-// ==================== 发送消息逻辑 ====================
 const sendMessage = async () => {
   const text = inputContent.value.trim()
   const hasImages = uploadedImages.value.length > 0
@@ -1043,17 +1041,12 @@ const sendMessage = async () => {
       chatList.value = newSession.messages
     }
 
-    // [修改] 构造显示内容：如果包含图片，转换为 Markdown 图片语法拼接在文本后
-    // 这样用户发送后，界面上能立即看到图片预览
     let displayContent = text
     if (currentImages.length > 0) {
-      // 将每个图片 URL 转换为 ![]() 格式
       const imageMarkdown = currentImages.map((url) => `![](${url})`).join('\n')
-      // 如果有文本，先换行；否则直接放图片
       displayContent = displayContent ? `${displayContent}\n${imageMarkdown}` : imageMarkdown
     }
 
-    // 在界面显示用户消息 (使用拼接后的内容)
     const userMsg = { role: 'user', content: displayContent }
     chatList.value.push(userMsg)
 
@@ -1065,12 +1058,10 @@ const sendMessage = async () => {
       }
     }
 
-    // 清空输入框和图片列表
     inputContent.value = ''
     uploadedImages.value = []
     scrollToBottom()
 
-    // [修改] 调用保存接口：传入纯文本 text 和图片列表 currentImages
     if (text || currentImages.length > 0) {
       await saveMessageToRemote('user', text, currentImages)
     }
@@ -1079,7 +1070,6 @@ const sendMessage = async () => {
     chatList.value.push(aiMsg)
     scrollToBottom()
 
-    // 流式请求配置
     const streamUrl = 'http://localhost:9000/nexus/chat-service/chat/call/stream'
 
     const requestBody = {
@@ -1088,7 +1078,7 @@ const sendMessage = async () => {
       conversationId: activeSessionId.value,
       userQuestion: text,
       toolUseAllowed: isMcpEnabled.value,
-      imageUrls: currentImages, // 保持传递图片 URL 给 LLM
+      imageUrls: currentImages,
     }
 
     const token = localStorage.getItem('token')
@@ -1147,7 +1137,6 @@ const sendMessage = async () => {
 
     aiMsg.loading = false
     if (fullContent) {
-      // AI 回复暂时通常没有图片，或者如果有也是 Markdown 格式，这里维持原样
       await saveMessageToRemote('assistant', fullContent)
     }
   } catch (e) {
@@ -1160,7 +1149,6 @@ const sendMessage = async () => {
         lastMsg.content = '（请求出错）'
       }
     }
-    // 发送失败恢复图片
     uploadedImages.value = currentImages
   } finally {
     isSending.value = false
@@ -1184,11 +1172,6 @@ const logout = () => {
 </script>
 
 <style scoped>
-/* 保持原有样式不变，下面是新增的样式 */
-
-/* ... (原有样式省略) ... */
-
-/* [新增] 图片预览区域样式 */
 .image-preview-area {
   display: flex;
   flex-wrap: wrap;
@@ -1240,7 +1223,6 @@ const logout = () => {
   background: rgba(255, 0, 0, 0.7);
 }
 
-/* 保持原有样式的剩余部分 */
 .context-menu {
   position: fixed;
   z-index: 9999;
@@ -1634,7 +1616,6 @@ const logout = () => {
   font-size: 12px;
 }
 
-/* MCP Control Styles */
 .mcp-control {
   display: flex;
   align-items: center;
@@ -1747,7 +1728,6 @@ const logout = () => {
   border-left: 0.25em solid #dfe2e5;
 }
 
-/* Inline code */
 :deep(.markdown-body code) {
   padding: 0.2em 0.4em;
   margin: 0;
@@ -1757,7 +1737,6 @@ const logout = () => {
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
 }
 
-/* Code Blocks (Pre) */
 :deep(.markdown-body pre) {
   padding: 12px;
   overflow: auto;
@@ -1778,7 +1757,6 @@ const logout = () => {
   white-space: pre;
 }
 
-/* Tables */
 :deep(.markdown-body table) {
   display: block;
   width: 100%;
@@ -1807,7 +1785,16 @@ const logout = () => {
   background-color: #f6f8fa;
 }
 
-/* 修复用户侧的气泡颜色冲突 */
+/* 新增：确保Markdown中的图片大小合适，不溢出 */
+:deep(.markdown-body img) {
+  max-width: 100%;
+  max-height: 400px;
+  border-radius: 8px;
+  margin-top: 10px;
+  display: block;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
 .msg-right :deep(.markdown-body) {
   color: #fff;
 }
