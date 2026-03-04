@@ -338,11 +338,43 @@
         </div>
       </div>
 
-      <div v-else-if="currentView === 'diagram'" class="placeholder-view">
-        <div class="placeholder-content">
-          <el-icon size="60" color="#ddd"><DocumentAdd /></el-icon>
-          <h2>文献示意图解析</h2>
-          <p>这里是功能占位演示，点击左侧“新建对话”返回聊天。</p>
+      <div v-else-if="currentView === 'diagram'" class="config-view-wrapper">
+        <div class="config-card diagram-card">
+          <div class="diagram-demo-wrapper">
+            <div class="config-header diagram-module-header">
+              <div class="header-left">
+                <h2>文献示意图与结构化输出 JSON</h2>
+                <p class="subtitle">上传文献示意图并解析，右侧展示结构化 JSON 结果</p>
+              </div>
+              <el-button type="primary" class="add-btn" @click="openDiagramUpload">
+                <el-icon style="margin-right: 6px"><UploadFilled /></el-icon>
+                上传文件并解析
+              </el-button>
+              <input
+                ref="diagramUploadInputRef"
+                type="file"
+                accept="image/*"
+                class="diagram-upload-input"
+                @change="handleDiagramFileChange"
+              />
+            </div>
+
+            <div class="diagram-demo-content">
+              <div class="diagram-panel image-panel">
+                <div class="panel-title">文献示意图预览</div>
+                <div class="panel-body image-body">
+                  <img :src="diagramImageUrl" alt="文献示意图" class="diagram-preview-image" />
+                </div>
+              </div>
+
+              <div class="diagram-panel json-panel">
+                <div class="panel-title">结构化输出 JSON</div>
+                <div class="panel-body json-body">
+                  <div class="diagram-json-render" v-html="diagramJsonHighlighted"></div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -445,7 +477,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, nextTick, onMounted, onUnmounted, watch } from 'vue'
+import { ref, reactive, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   ChatRound,
@@ -461,6 +493,7 @@ import {
   Close,
   Apple,
   Pear,
+  UploadFilled,
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
@@ -525,6 +558,162 @@ const loadUserInfo = () => {
 }
 
 const currentView = ref('chat')
+
+const DIAGRAM_SAMPLE_IMAGE_URL =
+  'https://songshilong.oss-cn-beijing.aliyuncs.com/paper/op000095p-Table-c2.jpg'
+const diagramImageUrl = ref(DIAGRAM_SAMPLE_IMAGE_URL)
+const diagramUploadInputRef = ref(null)
+const diagramObjectUrl = ref('')
+const diagramJsonData = ref({
+  filename: 'op000095p-Table-c2.jpg',
+  reactions: [
+    {
+      step: 1,
+      description: null,
+      reactants: [
+        {
+          smiles: 'OCC1=C([R1])C([R2])=C([R3])C=C1',
+          identifier: null,
+        },
+      ],
+      products: [
+        {
+          smiles: 'O=CC1=C([R1])C([R2])=C([R3])C=C1',
+          identifier: null,
+        },
+        {
+          smiles: 'O=C(O)C1=C([R1])C([R2])=C([R3])C=C1',
+          identifier: null,
+        },
+      ],
+      conditions: {
+        structure: [],
+        raw_content: ['i)'],
+        temperature: [],
+        yield: [],
+        time: [],
+        solvent: [],
+        reagent: [],
+        other: ['i)'],
+      },
+    },
+  ],
+  r_group: [
+    {
+      identifier: 'R¹',
+      target: ['1a: R¹=H', '2: R¹=H', '3: R¹=H', '4: R¹=H', '5: R¹=NO₂', '6: R¹=H'],
+    },
+    {
+      identifier: 'R²',
+      target: ['1a: R²=NO₂', '2: R²=H', '3: R²=CH₃O', '4: R²=H', '5: R²=H', '6: R²=CH₃O'],
+    },
+    {
+      identifier: 'R³',
+      target: ['1a: R³=H', '2: R³=Cl', '3: R³=CH₃O', '4: R³=CH₃O', '5: R³=H', '6: R³=H'],
+    },
+  ],
+  other: {
+    structure: [],
+    text: [],
+    identifier: [],
+    supplement: [
+      {
+        box: [6, 378, 1343, 915],
+        class_id: 3,
+        class_name: 'supplement',
+        confidence: 0.9782742857933044,
+      },
+    ],
+  },
+  table_content: [
+    {
+      table_name: 'table_1',
+      content: [
+        {
+          'R₁': 'H',
+          'R₂': 'NO₂',
+          'R₃': 'H',
+          'conv.': '100',
+          aldehyde: '—',
+          acid: '44.0',
+        },
+        {
+          'R₁': 'H',
+          'R₂': 'H',
+          'R₃': 'Cl',
+          'conv.': '82.2',
+          aldehyde: '7.4',
+          acid: '63.4',
+        },
+        {
+          'R₁': 'H',
+          'R₂': 'CH₃O',
+          'R₃': 'CH₃O',
+          'conv.': '84.2',
+          aldehyde: '38.3',
+          acid: '42.7',
+        },
+        {
+          'R₁': 'H',
+          'R₂': 'H',
+          'R₃': 'CH₃O',
+          'conv.': '100',
+          aldehyde: '53.0',
+          acid: '22.5',
+        },
+        {
+          'R₁': 'NO₂',
+          'R₂': 'H',
+          'R₃': 'H',
+          'conv.': '100',
+          aldehyde: '—',
+          acid: '17.0',
+        },
+        {
+          'R₁': 'H',
+          'R₂': 'CH₃O',
+          'R₃': 'H',
+          'conv.': '67.6',
+          aldehyde: '1.6',
+          acid: '65.8',
+        },
+      ],
+    },
+  ],
+})
+
+const diagramJsonHighlighted = computed(() => {
+  const jsonString = JSON.stringify(diagramJsonData.value, null, 2)
+  try {
+    const highlighted = hljs.highlight(jsonString, {
+      language: 'json',
+      ignoreIllegals: true,
+    }).value
+    return `<pre class="hljs"><code>${highlighted}</code></pre>`
+  } catch (e) {
+    return `<pre class="hljs"><code>${md.utils.escapeHtml(jsonString)}</code></pre>`
+  }
+})
+
+const openDiagramUpload = () => {
+  if (!diagramUploadInputRef.value) return
+  diagramUploadInputRef.value.click()
+}
+
+const handleDiagramFileChange = (event) => {
+  const file = event.target?.files?.[0]
+  if (!file) return
+
+  if (diagramObjectUrl.value) {
+    URL.revokeObjectURL(diagramObjectUrl.value)
+    diagramObjectUrl.value = ''
+  }
+
+  const nextUrl = URL.createObjectURL(file)
+  diagramObjectUrl.value = nextUrl
+  diagramImageUrl.value = nextUrl
+}
+
 const switchView = (viewName) => {
   currentView.value = viewName
   if (viewName === 'keys') {
@@ -816,6 +1005,10 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('click', closeContextMenu)
+  if (diagramObjectUrl.value) {
+    URL.revokeObjectURL(diagramObjectUrl.value)
+    diagramObjectUrl.value = ''
+  }
 })
 
 const handleDeleteHistory = () => {
@@ -1435,6 +1628,95 @@ const logout = () => {
 .placeholder-content h2 {
   margin: 20px 0 10px;
   color: #333;
+}
+.diagram-demo-wrapper {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.diagram-card {
+  overflow: hidden;
+}
+.diagram-demo-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.diagram-demo-header h2 {
+  margin: 0;
+  color: #333;
+  font-size: 22px;
+}
+.diagram-module-header {
+  margin-bottom: 0;
+}
+.diagram-upload-input {
+  display: none;
+}
+.diagram-demo-content {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+.diagram-panel {
+  background: #fff;
+  border-radius: 14px;
+  border: 1px solid #eceff4;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.json-panel {
+  height: 560px;
+}
+.image-panel {
+  height: 560px;
+}
+.panel-title {
+  padding: 14px 16px;
+  border-bottom: 1px solid #f0f2f5;
+  font-size: 14px;
+  font-weight: 600;
+  color: #4a4f5a;
+  text-align: center;
+}
+.panel-body {
+  flex: 1;
+  min-height: 0;
+}
+.image-body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+}
+.diagram-preview-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+}
+.json-body {
+  padding: 0;
+  overflow-x: auto;
+  overflow-y: auto;
+}
+.diagram-json-render {
+  min-height: 100%;
+}
+.diagram-json-render :deep(pre.hljs) {
+  margin: 0;
+  padding: 16px;
+  min-height: 100%;
+  border-radius: 0 0 14px 14px;
+  box-sizing: border-box;
 }
 .config-view-wrapper {
   flex: 1;
