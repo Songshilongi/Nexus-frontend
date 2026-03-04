@@ -2,7 +2,7 @@
   <el-container class="layout">
     <el-aside width="260px" class="sidebar">
       <div class="logo-area">
-        <div class="logo-text">Nexus AI Chat Room</div>
+        <div class="logo-text">化学信息抽取平台</div>
       </div>
 
       <div
@@ -19,24 +19,33 @@
 
       <div class="menu-btn" :class="{ active: currentView === 'keys' }" @click="switchView('keys')">
         <el-icon><Key /></el-icon>
-        <span>配置管理</span>
+        <span>智能问答基座模型管理</span>
       </div>
 
       <div class="menu-btn" :class="{ active: currentView === 'mcp' }" @click="switchView('mcp')">
         <el-icon><Connection /></el-icon>
-        <span>MCP 资源</span>
+        <span>信息抽取 MCP 资源管理</span>
       </div>
 
       <div
         class="menu-btn"
-        :class="{ active: currentView === 'tasks' }"
-        @click="switchView('tasks')"
+        :class="{ active: currentView === 'layout' }"
+        @click="switchView('layout')"
       >
-        <el-icon><DocumentAdd /></el-icon>
-        <span>任务创建</span>
+        <el-icon><Apple /></el-icon>
+        <span>Reaxys 文献解析</span>
       </div>
 
-      <div class="section-title" style="margin-top: 25px">选择对话模型</div>
+      <div
+        class="menu-btn"
+        :class="{ active: currentView === 'diagram' }"
+        @click="switchView('diagram')"
+      >
+        <el-icon><Apple /></el-icon>
+        <span>文献示意图解析</span>
+      </div>
+
+      <div class="section-title" style="margin-top: 25px">选择智能问答基座模型</div>
       <div class="config-switcher">
         <el-select
           v-model="activeConfigName"
@@ -321,10 +330,18 @@
         </el-dialog>
       </div>
 
-      <div v-else-if="currentView === 'tasks'" class="placeholder-view">
+      <div v-else-if="currentView === 'layout'" class="placeholder-view">
         <div class="placeholder-content">
           <el-icon size="60" color="#ddd"><DocumentAdd /></el-icon>
-          <h2>任务创建中心</h2>
+          <h2>Reaxys版面分析</h2>
+          <p>这里是功能占位演示，点击左侧“新建对话”返回聊天。</p>
+        </div>
+      </div>
+
+      <div v-else-if="currentView === 'diagram'" class="placeholder-view">
+        <div class="placeholder-content">
+          <el-icon size="60" color="#ddd"><DocumentAdd /></el-icon>
+          <h2>文献示意图解析</h2>
           <p>这里是功能占位演示，点击左侧“新建对话”返回聊天。</p>
         </div>
       </div>
@@ -442,6 +459,7 @@ import {
   Delete,
   Connection,
   Close,
+  Apple,
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
@@ -1308,6 +1326,7 @@ const logout = () => {
   font-size: 22px;
   font-weight: 700;
   letter-spacing: 0.5px;
+  text-align: center;
 }
 .section-title {
   font-size: 14px;
