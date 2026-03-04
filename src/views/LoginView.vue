@@ -1,9 +1,13 @@
 <template>
   <div class="login-container">
+    <div class="chem-bg" aria-hidden="true">
+      <span class="molecule molecule-1"></span>
+      <span class="molecule molecule-2"></span>
+      <span class="molecule molecule-3"></span>
+    </div>
     <div class="login-content">
       <div class="header-area">
         <div class="logo-text">多模态化学信息抽取智能问答集成系统</div>
-        <div class="subtitle">基于ReAct Agent架构设计</div>
       </div>
 
       <div class="auth-card">
@@ -132,7 +136,7 @@
         </el-form>
       </div>
 
-      <footer class="footer">© 2025 Chemical Platform</footer>
+      <footer class="footer">© 2026 Chemical Platform</footer>
     </div>
   </div>
 </template>
@@ -359,11 +363,16 @@ onUnmounted(clearCountdown)
 </script>
 
 <style scoped>
-/* 容器：与 ChatView 背景色一致 */
+/* 容器：化学风格背景 */
 .login-container {
+  position: relative;
+  overflow: hidden;
   min-height: 100vh;
   width: 100%;
-  background-color: #f8f8f9;
+  background:
+    radial-gradient(circle at 18% 22%, rgba(26, 176, 159, 0.16) 0, rgba(26, 176, 159, 0) 32%),
+    radial-gradient(circle at 86% 16%, rgba(82, 131, 255, 0.18) 0, rgba(82, 131, 255, 0) 34%),
+    linear-gradient(145deg, #eef6ff 0%, #f5fffd 48%, #f2f4ff 100%);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -371,7 +380,74 @@ onUnmounted(clearCountdown)
     -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
+.chem-bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.chem-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(57, 120, 201, 0.09) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(57, 120, 201, 0.09) 1px, transparent 1px);
+  background-size: 38px 38px;
+  mask-image: radial-gradient(circle at center, #000 20%, transparent 82%);
+}
+
+.molecule {
+  position: absolute;
+  width: 170px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 2px solid rgba(87, 148, 238, 0.2);
+  box-shadow:
+    0 0 0 18px rgba(96, 175, 255, 0.07),
+    0 0 0 40px rgba(68, 197, 168, 0.05);
+}
+
+.molecule::before,
+.molecule::after {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #5fc3ff, #37b89d);
+}
+
+.molecule::before {
+  top: -6px;
+  left: 45%;
+}
+
+.molecule::after {
+  bottom: 14%;
+  right: -7px;
+}
+
+.molecule-1 {
+  left: -58px;
+  top: 10%;
+}
+
+.molecule-2 {
+  right: -70px;
+  top: 18%;
+  transform: scale(0.8);
+}
+
+.molecule-3 {
+  right: 10%;
+  bottom: -76px;
+  transform: scale(1.15);
+}
+
 .login-content {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -389,12 +465,11 @@ onUnmounted(clearCountdown)
 .logo-text {
   font-size: 32px;
   font-weight: 800;
-  /* 使用与 ChatView 欢迎语一致的蓝色渐变 */
-  background: linear-gradient(to right, #2c7bf6, #5ca9ff);
+  background: linear-gradient(100deg, #1fa58e, #2e86ff 48%, #53a9ff);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  letter-spacing: -0.5px;
+  letter-spacing: 0.3px;
 }
 
 .subtitle {
@@ -404,14 +479,17 @@ onUnmounted(clearCountdown)
   letter-spacing: 2px;
 }
 
-/* 卡片样式：现代化、阴影、圆角 */
 .auth-card {
   width: 100%;
   max-width: 440px;
-  background: #ffffff;
-  border-radius: 16px;
-  /* 柔和的阴影，去除像素风的硬边框 */
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  background: rgba(255, 255, 255, 0.84);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(117, 165, 238, 0.28);
+  border-radius: 20px;
+  box-shadow:
+    0 16px 34px rgba(37, 75, 140, 0.12),
+    0 3px 10px rgba(57, 148, 134, 0.08);
   padding: 40px;
   animation: fadeInUp 0.6s ease-out;
 }
@@ -432,13 +510,13 @@ onUnmounted(clearCountdown)
 }
 
 .auth-form :deep(.el-input__wrapper) {
-  box-shadow: 0 0 0 1px #dcdfe6 inset;
+  box-shadow: 0 0 0 1px #c4d6f7 inset;
   border-radius: 8px; /* 输入框圆角 */
   padding: 1px 11px;
 }
 
 .auth-form :deep(.el-input__wrapper.is-focus) {
-  box-shadow: 0 0 0 1px #7a8cff inset !important;
+  box-shadow: 0 0 0 1px #2e89ff inset !important;
 }
 
 .login-options {
@@ -449,11 +527,11 @@ onUnmounted(clearCountdown)
 }
 
 .forgot-btn {
-  color: #7a8cff;
+  color: #2e89ff;
 }
 
 .forgot-btn:hover {
-  color: #6b7de0;
+  color: #1f78eb;
 }
 
 /* 验证码行 */
@@ -469,13 +547,12 @@ onUnmounted(clearCountdown)
   border-radius: 8px;
 }
 
-/* 提交按钮：使用 ChatView 主色调 */
 .submit-btn {
   width: 100%;
   font-size: 16px;
   padding: 22px 0; /* 增加高度 */
-  background-color: #7a8cff;
-  border-color: #7a8cff;
+  background: linear-gradient(135deg, #22b08e, #2f8dff);
+  border: 0;
   border-radius: 8px;
   font-weight: 600;
   letter-spacing: 1px;
@@ -484,10 +561,9 @@ onUnmounted(clearCountdown)
 }
 
 .submit-btn:hover {
-  background-color: #6b7de0;
-  border-color: #6b7de0;
+  background: linear-gradient(135deg, #1f9e80, #2979f1);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(122, 140, 255, 0.3);
+  box-shadow: 0 6px 14px rgba(46, 137, 255, 0.32);
 }
 
 .submit-btn:active {
@@ -505,12 +581,12 @@ onUnmounted(clearCountdown)
 }
 
 .bottom-links :deep(.el-button) {
-  color: #7a8cff;
+  color: #2e89ff;
   font-weight: 600;
 }
 
 .bottom-links :deep(.el-button:hover) {
-  color: #6b7de0;
+  color: #1f78eb;
 }
 
 .footer {
@@ -540,6 +616,21 @@ onUnmounted(clearCountdown)
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@media (max-width: 768px) {
+  .logo-text {
+    font-size: 24px;
+  }
+
+  .auth-card {
+    padding: 28px 22px;
+    border-radius: 16px;
+  }
+
+  .molecule {
+    width: 130px;
   }
 }
 </style>
