@@ -41,7 +41,7 @@
         :class="{ active: currentView === 'diagram' }"
         @click="switchView('diagram')"
       >
-        <el-icon><Apple /></el-icon>
+        <el-icon><Pear /></el-icon>
         <span>文献示意图解析</span>
       </div>
 
@@ -460,6 +460,7 @@ import {
   Connection,
   Close,
   Apple,
+  Pear,
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
