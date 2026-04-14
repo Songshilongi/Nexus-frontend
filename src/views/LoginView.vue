@@ -7,7 +7,7 @@
     </div>
     <div class="login-content">
       <div class="header-area">
-        <div class="logo-text">多模态化学信息抽取智能问答集成系统</div>
+        <div class="logo-text">化学有机合成反应信息抽取智能问答系统</div>
       </div>
 
       <div class="auth-card">

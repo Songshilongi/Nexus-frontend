@@ -1,8 +1,8 @@
 <template>
   <el-container class="layout">
-    <el-aside width="260px" class="sidebar">
+    <el-aside width="280px" class="sidebar">
       <div class="logo-area">
-        <div class="logo-text">多模态化学信息抽取<br />智能问答平台</div>
+        <div class="logo-text">化学有机合成反应<br />信息抽取智能问答系统</div>
       </div>
 
       <div
@@ -45,7 +45,7 @@
         <span>文献示意图解析</span>
       </div>
 
-      <div class="section-title" style="margin-top: 25px">选择智能问答基座模型</div>
+      <div class="section-title" style="margin-top: 28px">选择智能问答基座模型</div>
       <div class="config-switcher">
         <el-select
           v-model="activeConfigName"
@@ -66,7 +66,7 @@
         <div class="active-config-tip no-config" v-else>未选择配置</div>
       </div>
 
-      <div class="section-title" style="margin-top: 25px">历史对话</div>
+      <div class="section-title" style="margin-top: 26px">历史对话</div>
 
       <div class="history-list" v-loading="loadingHistory">
         <div v-if="history.length === 0 && !loadingHistory" class="empty-history">暂无历史记录</div>
@@ -335,7 +335,7 @@
           <div class="reaxys-demo-wrapper">
             <div class="config-header reaxys-module-header">
               <div class="header-left">
-                <h2>布局检测与解析工具联合处理的版面分析智能理解（Reaxys化学文献）</h2>
+                <h2>基于版面分析与协同解析的化学文献多模态结构化提取</h2>
                 <p class="subtitle">上传 PDF 文献并解析，展示结构化 JSON 结果</p>
               </div>
               <el-button type="primary" class="add-btn" @click="openReaxysUpload">
@@ -379,7 +379,7 @@
           <div class="diagram-demo-wrapper">
             <div class="config-header diagram-module-header">
               <div class="header-left">
-                <h2>通专模型融合的文献示意图解析</h2>
+                <h2>领域先验知识增强的多模型协同文献示意图解析</h2>
                 <p class="subtitle">上传文献示意图并解析，右侧展示结构化 JSON 结果</p>
               </div>
               <el-button type="primary" class="add-btn" @click="openDiagramUpload">
@@ -1968,7 +1968,7 @@ const logout = () => {
   padding: 12px 10px;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 16px;
   color: #333;
   transition: all 0.2s;
 }
